@@ -1,0 +1,150 @@
+:root {
+    --primary-color: #d9006c;
+    /* Tauron Magenta-ish */
+    --background-color: #f4f4f9;
+    --card-background: #ffffff;
+    --text-color: #333;
+    --secondary-text: #666;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+.container {
+    width: 100%;
+    max-width: 600px;
+    padding: 2rem;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+h1 {
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+#last-updated {
+    color: var(--secondary-text);
+    font-size: 0.9rem;
+}
+
+.card {
+    background-color: var(--card-background);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.outage-type {
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.outage-time {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+
+.outage-reason {
+    color: var(--secondary-text);
+}
+
+.no-outages {
+    text-align: center;
+    padding: 2rem;
+    background-color: #e6fffa;
+    color: #047481;
+    border-radius: 8px;
+    border: 1px solid #b2f5ea;
+}
+
+.error {
+    text-align: center;
+    padding: 2rem;
+    background-color: #fff5f5;
+    color: #c53030;
+    border-radius: 8px;
+    border: 1px solid #fed7d7;
+}
+
+.loading {
+    text-align: center;
+    color: var(--secondary-text);
+    padding: 2rem;
+}
+
+.section-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--primary-color);
+    margin: 1.5rem 0 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.section-label.other {
+    color: var(--secondary-text);
+    border-bottom-color: #ddd;
+}
+
+.outage-message {
+    margin-top: 1rem;
+    font-size: 0.95rem;
+    color: var(--text-color);
+    border-top: 1px solid #eee;
+    padding-top: 0.5rem;
+}
+
+.pull-indicator {
+    text-align: center;
+    color: var(--primary-color);
+    font-size: 1.1rem;
+    font-weight: 600;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.2s ease, opacity 0.2s ease;
+}
+
+.pull-indicator.visible {
+    max-height: 50px;
+    opacity: 1;
+    padding: 0.75rem 0;
+}
+
+.pull-indicator.refreshing {
+    max-height: 50px;
+    opacity: 1;
+    padding: 0.75rem 0;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}

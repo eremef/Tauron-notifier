@@ -1,0 +1,15 @@
+{
+  "name": "tauron-notifier",
+  "version": "1.0.0",
+  "description": "Tauron outage notifier — Tauri desktop & Android app",
+  "scripts": {
+    "tauri": "tauri",
+    "build": "tauri build",
+    "dev": "tauri dev",
+    "android:build": "tauri android build",
+    "android:dev": "tauri android dev"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.0"
+  }
+}
