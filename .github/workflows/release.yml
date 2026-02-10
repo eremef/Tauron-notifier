@@ -28,7 +28,7 @@ jobs:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
       - name: Build Android
-        run: npm run android:build -- --verbose --stacktrace
+        run: npm run android:build --verbose --stacktrace
         
       - name: Rename Artifacts
         run: |
@@ -59,7 +59,7 @@ jobs:
         run: npm run ios:init
 
       - name: Build iOS (Unsigned)
-        run: npm run ios:build -- -- --no-codesign
+        run: npm run ios:build -- --no-codesign
         env:
           CODE_SIGN_STYLE: Manual
           DEVELOPMENT_TEAM: ""
