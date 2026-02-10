@@ -28,16 +28,18 @@ header {
     text-align: center;
     margin-bottom: 2rem;
     position: relative;
+    padding-top: 0.5rem;
 }
 
 h1 {
     color: var(--primary-color);
-    margin-bottom: 0.5rem;
+    margin-bottom: 0;
 }
 
 #last-updated {
     color: var(--secondary-text);
     font-size: 0.9rem;
+    margin: 0.2rem;
 }
 
 /* ── Settings ──────────────────────────────── */
@@ -151,8 +153,8 @@ h1 {
 .card {
     background-color: var(--card-background);
     border-radius: 8px;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
     box-shadow: var(--shadow);
     transition: transform 0.2s;
 }
@@ -179,7 +181,7 @@ h1 {
 
 .no-outages {
     text-align: center;
-    padding: 2rem;
+    padding: 1rem;
     background-color: #e6fffa;
     color: #047481;
     border-radius: 8px;
