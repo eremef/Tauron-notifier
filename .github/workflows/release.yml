@@ -28,7 +28,7 @@ jobs:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
       - name: Build Android
-        run: npm run android:build --verbose --stacktrace
+        run: npm run android:build --verbose --stacktrace --warning-mode all
         
       - name: Rename Artifacts
         run: |
@@ -61,7 +61,8 @@ jobs:
       - name: Patch Xcode Project
         run: |
           sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' src-tauri/gen/apple/app.xcodeproj/project.pbxproj
-          sed -i '' 's/DEVELOPMENT_TEAM = [A-Z0-9]*;/DEVELOPMENT_TEAM = "";/g' src-tauri/gen/apple/app.xcodeproj/project.pbxproj
+          sed -i '' '/DEVELOPMENT_TEAM/d' src-tauri/gen/apple/app.xcodeproj/project.pbxproj
+          sed -i '' '/CODE_SIGN_IDENTITY/d' src-tauri/gen/apple/app.xcodeproj/project.pbxproj
 
       - name: Build iOS (Unsigned)
         run: npm run ios:build -- -- --no-codesign
