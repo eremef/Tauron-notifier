@@ -1,0 +1,80 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Android
+        run: npm run android:build
+        
+      - name: Rename Artifacts
+        run: |
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk tauron-notifier-android-universal.apk
+          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universalRelease.aab tauron-notifier-android-universal.aab || true
+          
+      - name: Upload APK
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            tauron-notifier-android-universal.apk
+            tauron-notifier-android-universal.aab
+
+  release-desktop:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest' # ARM64 (M1)
+            target: 'aarch64-apple-darwin'
+          - platform: 'macos-latest' # Intentionally x64
+            target: 'x86_64-apple-darwin'
+          - platform: 'windows-latest'
+            target: 'x86_64-pc-windows-msvc'
+          - platform: 'windows-latest'
+            target: 'aarch64-pc-windows-msvc' # Requires extra setup usually
+          - platform: 'ubuntu-latest'
+            target: 'x86_64-unknown-linux-gnu'
+          - platform: 'ubuntu-24.04-arm'
+            target: 'aarch64-unknown-linux-gnu'
+
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - name: Install Rust target
+        if: matrix.target != ''
+        run: rustup target add ${{ matrix.target }}
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }} # e.g. v0.1.0
+          releaseName: 'Tauron Notifier ${{ github.ref_name }}'
+          args: --target ${{ matrix.target }}
