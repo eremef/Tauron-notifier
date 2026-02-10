@@ -64,7 +64,7 @@ jobs:
           sed -i '' 's/DEVELOPMENT_TEAM = [A-Z0-9]*;/DEVELOPMENT_TEAM = "";/g' src-tauri/gen/apple/app.xcodeproj/project.pbxproj
 
       - name: Build iOS (Unsigned)
-        run: npm run ios:build --no-codesign
+        run: npm run ios:build -- -- --no-codesign
         env:
           CODE_SIGN_STYLE: Manual
           DEVELOPMENT_TEAM: ""
