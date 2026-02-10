@@ -86,9 +86,7 @@ function renderCards(outages) {
             <div class="outage-time">
                 ${formatDate(item.StartDate)} – ${formatDate(item.EndDate)}
             </div>
-            <div class="outage-reason">
-                ${item.Description || 'No description available'}
-            </div>
+            ${item.Description ? `<div class="outage-reason">${item.Description}</div>` : ''}
             ${item.Message ? `<div class="outage-message">${item.Message}</div>` : ''}
         </div>
     `).join('');

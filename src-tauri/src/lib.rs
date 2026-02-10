@@ -9,6 +9,7 @@ async fn fetch_outages() -> Result<serde_json::Value, String> {
     let url = "https://www.tauron-dystrybucja.pl/waapi/outages/address";
     
     let client = reqwest::Client::new();
+    let cache_bust = now.timestamp_millis().to_string();
     let query_params: Vec<(&str, &str)> = vec![
         ("cityGAID", "119431"),
         ("streetGAID", "897300"),
@@ -16,7 +17,7 @@ async fn fetch_outages() -> Result<serde_json::Value, String> {
         ("fromDate", &from_date),
         ("getLightingSupport", "true"),
         ("getServicedSwitchingoff", "true"),
-        ("_", &now.timestamp_millis().to_string()),
+        ("_", &cache_bust),
     ];
 
     let res = client.get(url)

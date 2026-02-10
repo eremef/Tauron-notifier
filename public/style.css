@@ -61,7 +61,7 @@ h1 {
 }
 
 .outage-time {
-    font-size: 1.1rem;
+    font-size: 0.8rem;
     margin-bottom: 0.5rem;
 }
 
@@ -97,7 +97,7 @@ h1 {
     font-weight: 600;
     font-size: 0.95rem;
     color: var(--primary-color);
-    margin: 1.5rem 0 0.5rem;
+    margin: 0.75rem 0 0.5rem;
     padding-bottom: 0.25rem;
     border-bottom: 2px solid var(--primary-color);
 }
@@ -108,11 +108,11 @@ h1 {
 }
 
 .outage-message {
-    margin-top: 1rem;
+    margin-top: 0.5rem;
     font-size: 0.95rem;
     color: var(--text-color);
     border-top: 1px solid #eee;
-    padding-top: 0.5rem;
+    padding-top: 0.25rem;
 }
 
 .pull-indicator {
