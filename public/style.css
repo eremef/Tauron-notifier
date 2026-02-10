@@ -16,19 +16,21 @@ body {
     display: flex;
     justify-content: center;
     min-height: 100vh;
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 .container {
     width: 100%;
     max-width: 600px;
-    padding: 2rem;
+    padding: 0.5rem;
 }
 
 header {
     text-align: center;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
     position: relative;
-    padding-top: 0.5rem;
+    padding-bottom: 1rem;
+    padding-top: env(safe-area-inset-top);
 }
 
 h1 {
@@ -52,9 +54,13 @@ h1 {
     border: none;
     font-size: 1.5rem;
     cursor: pointer;
-    padding: 0.25rem;
+    padding-top: calc(env(safe-area-inset-top) + 0.5rem);
+    padding-bottom: 0.5rem;
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
     opacity: 0.7;
     transition: opacity 0.2s;
+    z-index: 10;
 }
 
 .settings-btn:hover {

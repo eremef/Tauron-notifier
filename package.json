@@ -7,7 +7,8 @@
     "build": "tauri build",
     "dev": "tauri dev",
     "android:build": "tauri android build",
-    "android:dev": "tauri android dev"
+    "android:dev": "tauri android dev",
+    "ios:build": "tauri ios build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0"
