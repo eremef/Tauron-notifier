@@ -1,6 +1,5 @@
 :root {
     --primary-color: #d9006c;
-    /* Tauron Magenta-ish */
     --background-color: #f4f4f9;
     --card-background: #ffffff;
     --text-color: #333;
@@ -28,6 +27,7 @@ body {
 header {
     text-align: center;
     margin-bottom: 2rem;
+    position: relative;
 }
 
 h1 {
@@ -39,6 +39,114 @@ h1 {
     color: var(--secondary-text);
     font-size: 0.9rem;
 }
+
+/* ── Settings ──────────────────────────────── */
+
+.settings-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.settings-btn:hover {
+    opacity: 1;
+}
+
+.settings-panel {
+    background: var(--card-background);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow);
+    transition: all 0.3s ease;
+}
+
+.settings-panel.hidden {
+    display: none;
+}
+
+.settings-title {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+.settings-field {
+    margin-bottom: 0.75rem;
+}
+
+.settings-field label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--secondary-text);
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.settings-field input {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+}
+
+.settings-field input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.save-btn {
+    width: 100%;
+    padding: 0.7rem;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    margin-top: 0.5rem;
+}
+
+.save-btn:hover {
+    opacity: 0.9;
+}
+
+.save-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.settings-status {
+    font-size: 0.85rem;
+    padding: 0.4rem 0;
+    min-height: 1.2em;
+}
+
+.settings-status.error {
+    color: #c53030;
+}
+
+.settings-status.success {
+    color: #047481;
+}
+
+/* ── Cards ─────────────────────────────────── */
 
 .card {
     background-color: var(--card-background);
@@ -114,6 +222,8 @@ h1 {
     border-top: 1px solid #eee;
     padding-top: 0.25rem;
 }
+
+/* ── Pull to Refresh ───────────────────────── */
 
 .pull-indicator {
     text-align: center;

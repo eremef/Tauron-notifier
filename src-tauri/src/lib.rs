@@ -1,38 +1,140 @@
 use tauri::command;
+use tauri::AppHandle;
+use tauri::Manager;
 use chrono::{Utc, SecondsFormat};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+
+const BASE_URL: &str = "https://www.tauron-dystrybucja.pl/waapi";
+
+#[derive(Debug, Serialize, Deserialize)]
+#[allow(non_snake_case)]
+pub struct GeoItem {
+    pub GAID: u64,
+    pub Name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(non_snake_case)]
+pub struct Settings {
+    pub cityName: String,
+    pub streetName: String,
+    pub houseNo: String,
+    pub cityGAID: u64,
+    pub streetGAID: u64,
+}
+
+fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    Ok(data_dir.join("settings.json"))
+}
+
+fn build_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .build()
+        .map_err(|e| e.to_string())
+}
 
 #[command]
-async fn fetch_outages() -> Result<serde_json::Value, String> {
+async fn lookup_city(city_name: String) -> Result<Vec<GeoItem>, String> {
+    let client = build_client()?;
+    let cache_bust = Utc::now().timestamp_millis().to_string();
+
+    let res = client
+        .get(&format!("{}/enum/geo/cities", BASE_URL))
+        .query(&[("partName", &city_name), ("_", &cache_bust)])
+        .header("accept", "application/json")
+        .header("x-requested-with", "XMLHttpRequest")
+        .header("Referer", "https://www.tauron-dystrybucja.pl/wylaczenia")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("HTTP error: {}", res.status()));
+    }
+
+    res.json().await.map_err(|e| e.to_string())
+}
+
+#[command]
+async fn lookup_street(street_name: String, city_gaid: u64) -> Result<Vec<GeoItem>, String> {
+    let client = build_client()?;
+    let cache_bust = Utc::now().timestamp_millis().to_string();
+    let owner = city_gaid.to_string();
+
+    let res = client
+        .get(&format!("{}/enum/geo/streets", BASE_URL))
+        .query(&[
+            ("partName", street_name.as_str()),
+            ("ownerGAID", &owner),
+            ("_", &cache_bust),
+        ])
+        .header("accept", "application/json")
+        .header("x-requested-with", "XMLHttpRequest")
+        .header("Referer", "https://www.tauron-dystrybucja.pl/wylaczenia")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("HTTP error: {}", res.status()));
+    }
+
+    res.json().await.map_err(|e| e.to_string())
+}
+
+#[command]
+async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
+    let path = settings_path(&app)?;
+    let json = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[command]
+async fn load_settings(app: AppHandle) -> Result<Option<Settings>, String> {
+    let path = settings_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let data = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let settings: Settings = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+    Ok(Some(settings))
+}
+
+#[command]
+async fn fetch_outages(app: AppHandle) -> Result<serde_json::Value, String> {
+    let path = settings_path(&app)?;
+    if !path.exists() {
+        return Err("No settings configured. Please set up your location first.".into());
+    }
+    let data = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let settings: Settings = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+
     let now = Utc::now();
     let from_date = now.to_rfc3339_opts(SecondsFormat::Millis, true);
-    
-    let url = "https://www.tauron-dystrybucja.pl/waapi/outages/address";
-    
-    let client = reqwest::Client::new();
     let cache_bust = now.timestamp_millis().to_string();
+    let city_str = settings.cityGAID.to_string();
+    let street_str = settings.streetGAID.to_string();
+
+    let client = build_client()?;
     let query_params: Vec<(&str, &str)> = vec![
-        ("cityGAID", "119431"),
-        ("streetGAID", "897300"),
-        ("houseNo", "8"),
+        ("cityGAID", &city_str),
+        ("streetGAID", &street_str),
+        ("houseNo", &settings.houseNo),
         ("fromDate", &from_date),
-        ("getLightingSupport", "true"),
+        ("getLightingSupport", "false"),
         ("getServicedSwitchingoff", "true"),
         ("_", &cache_bust),
     ];
 
-    let res = client.get(url)
+    let res = client.get(&format!("{}/outages/address", BASE_URL))
         .query(&query_params)
-        .header("accept", "application/json, text/javascript, */*; q=0.01")
-        .header("accept-language", "pl;q=0.8")
-        .header("sec-ch-ua", "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\", \"Brave\";v=\"144\"")
-        .header("sec-ch-ua-mobile", "?0")
-        .header("sec-ch-ua-platform", "\"Windows\"")
-        .header("sec-fetch-dest", "empty")
-        .header("sec-fetch-mode", "cors")
-        .header("sec-fetch-site", "same-origin")
-        .header("sec-gpc", "1")
+        .header("accept", "application/json")
         .header("x-requested-with", "XMLHttpRequest")
-        .header("cookie", "shell#lang=en; ASP.NET_SessionId=wuyz0t43k0scrn2hg0fntzrd; SERVERID=var02; tauron-load-balancer-cookie-w=!kFDkC4WWkqO/xcVy4hYKIFHezWcwD86Bzl+/yyVijjteif/LyRKpOfQq7Lx71FyJHZG0n3F/Fni7l1q0VEOqGWoRGIrW/yoXG0PqM8f+iygl; SC_ANALYTICS_GLOBAL_COOKIE=2bed67dd00d34312bcaa72f4eb145fc1|True; 2effbf1d689e5e222f6296ba4e6dada6=59b43dd83da3cbdea52930250fa39faa; TS018bf492=015f73abc6682f350f940cc5eae57d9b98f432548c1e0ea6b44c2de0a29439283143b6f406bd4bb088970bdd3779e1d45835e418f02318a72d0dd94c6cd94c93dcc073bb2139ee27c52394c96a32313bf0c53a4bd9234d4b728acb470c8c74526170c7ed9a00b55e5866bb5309a040a20ad7a5b49fb369fbf0174cd1f15a062be2bcfd91d4")
         .header("Referer", "https://www.tauron-dystrybucja.pl/wylaczenia")
         .send()
         .await
@@ -62,7 +164,13 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![fetch_outages])
+    .invoke_handler(tauri::generate_handler![
+        fetch_outages,
+        lookup_city,
+        lookup_street,
+        save_settings,
+        load_settings
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
