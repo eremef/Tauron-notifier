@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "tauron-notifier",
   "version": "0.1.0",
-  "identifier": "xyz.eremef.tauron-notifier",
+  "identifier": "xyz.eremef.tauron_notifier",
   "build": {
     "frontendDist": "../public"
   },
