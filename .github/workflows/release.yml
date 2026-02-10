@@ -36,31 +36,39 @@ jobs:
             tauron-notifier-android-universal.apk
             tauron-notifier-android-universal.aab
 
-#   release-ios:
-#     runs-on: macos-latest
-#     steps:
-#       - uses: actions/checkout@v4
-#       - uses: actions/setup-node@v4
-#         with:
-#           node-version: 20
-#       - name: Install Rust target
-#         run: rustup target add aarch64-apple-ios x86_64-apple-ios
-#       - name: Install dependencies
-#         run: npm ci
+  release-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Rust target
+        run: rustup target add aarch64-apple-ios x86_64-apple-ios
+      - name: Install dependencies
+        run: npm ci
 
-#       - name: Build iOS
-#         run: npm run ios:build
-#         env:
-#           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-#           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-#           APPLE_MOBILE_PROVISIONING_PROFILE: ${{ secrets.APPLE_MOBILE_PROVISIONING_PROFILE }}
-#           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Initialize iOS
+        run: npm run ios:init
 
-#       - name: Upload IPA
-#         uses: softprops/action-gh-release@v2
-#         if: startsWith(github.ref, 'refs/tags/')
-#         with:
-#           files: src-tauri/gen/apple/build/arm64/tauron-notifier.ipa
+      - name: Build iOS (Unsigned)
+        run: npm run ios:build -- -- --no-codesign
+        env:
+          CODE_SIGNING_ALLOWED: "NO"
+          CODE_SIGNING_REQUIRED: "NO"
+          CODE_SIGNING_IDENTITY: ""
+
+      - name: Package Payload
+        run: |
+          mkdir Payload
+          cp -r src-tauri/gen/apple/build/arm64/tauron-notifier.app Payload/
+          zip -r tauron-notifier-ios-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: tauron-notifier-ios-unsigned.ipa
 
   release-desktop:
     permissions:
