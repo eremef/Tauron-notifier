@@ -87,7 +87,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies (Ubuntu)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies (System)
         if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
@@ -96,6 +101,9 @@ jobs:
       - name: Install Rust target
         if: matrix.target != ''
         run: rustup target add ${{ matrix.target }}
+
+      - name: Install app dependencies
+        run: npm ci
 
       - uses: tauri-apps/tauri-action@v0
         env:
