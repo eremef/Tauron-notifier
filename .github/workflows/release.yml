@@ -87,21 +87,27 @@ jobs:
 
       - name: Package Payload
         run: |
-          # Verify .app exists (it might be in a Release-iphoneos subfolder or directly in arm64 depending on xcodebuild)
-          # We check the location where tauri usually leaves it, or where xcode builds it.
-          # Based on previous logs/configs, assuming src-tauri/gen/apple/build/arm64/tauron-notifier.app
+          # The export step might fail due to "No Team Found", but the archive should be created.
+          # We search for the .xcarchive first.
           
-          APP_PATH="src-tauri/gen/apple/build/arm64/tauron-notifier.app"
-          
-          if [ ! -d "$APP_PATH" ]; then
-             echo "Error: .app bundle not found at $APP_PATH"
-             # Try to find it in Release-iphoneos just in case
-             APP_PATH="src-tauri/gen/apple/build/arm64/Release-iphoneos/tauron-notifier.app"
-          fi
+          XCARCHIVE_PATH=$(find src-tauri/gen/apple/build -name "*.xcarchive" | head -n 1)
+          APP_PATH=""
 
+          if [ -d "$XCARCHIVE_PATH" ]; then
+             echo "Found xcarchive at $XCARCHIVE_PATH"
+             APP_PATH="$XCARCHIVE_PATH/Products/Applications/tauron-notifier.app"
+          else
+             echo "xcarchive not found, checking for .app directly..."
+             # Fallback to direct app path (standard derived data or build output)
+             POSSIBLE_APPS=$(find src-tauri/gen/apple/build -name "*.app" | head -n 1)
+             if [ -n "$POSSIBLE_APPS" ]; then
+                APP_PATH="$POSSIBLE_APPS"
+             fi
+          fi
+          
           if [ ! -d "$APP_PATH" ]; then
-             echo "Critical Error: .app bundle not found in expected locations!"
-             # List directory to help debugging
+             echo "Critical Error: .app bundle not found!"
+             echo "Listing build directory for debugging:"
              ls -R src-tauri/gen/apple/build || true
              exit 1
           fi
