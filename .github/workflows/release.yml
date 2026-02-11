@@ -48,16 +48,16 @@ jobs:
         
       - name: Rename Artifacts
         run: |
-          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk tauron-notifier-android-universal.apk
-          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab tauron-notifier-android-universal.aab || true
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk Android-tauron-notifier.apk
+          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab Android-tauron-notifier.aab || true
           
       - name: Upload APK
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            tauron-notifier-android-universal.apk
-            tauron-notifier-android-universal.aab
+            Android-tauron-notifier.apk
+            Android-tauron-notifier.aab
 
   release-ios:
     runs-on: macos-latest
@@ -118,13 +118,13 @@ jobs:
           echo "Found app at $APP_PATH"
           mkdir Payload
           cp -r "$APP_PATH" Payload/
-          zip -r tauron-notifier-ios-unsigned.ipa Payload
+          zip -r iOS-tauron-notifier-unsigned.ipa Payload
 
       - name: Upload IPA
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: tauron-notifier-ios-unsigned.ipa
+          files: iOS-tauron-notifier-unsigned.ipa
 
   release-desktop:
     permissions:
@@ -156,23 +156,67 @@ jobs:
           node-version: 20
           cache: 'npm'
 
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+
       - name: Install dependencies (System)
         if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
 
-      - name: Install Rust target
-        if: matrix.target != ''
-        run: rustup target add ${{ matrix.target }}
 
       - name: Install app dependencies
         run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: Build
+        run: npm run build -- --target ${{ matrix.target }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p release-artifacts
+          
+          # Define source directory for bundles
+          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
+          
+          # Function to move and rename files safely
+          # Usage: safe_move <source_pattern> <dest_name>
+          safe_move() {
+            find "$BUNDLE_DIR" -name "$1" -type f | while read -r file; do
+              echo "Moving $file to release-artifacts/$2"
+              cp "$file" "release-artifacts/$2"
+            done
+          }
+
+          # Linux
+          if [[ "${{ matrix.platform }}" == "ubuntu-latest" || "${{ matrix.platform }}" == "ubuntu-24.04-arm" ]]; then
+            safe_move "*.deb" "Linux-tauron-notifier_${{ github.ref_name }}_${{ matrix.target }}.deb"
+            safe_move "*.AppImage" "Linux-tauron-notifier_${{ github.ref_name }}_${{ matrix.target }}.AppImage"
+          fi
+
+          # Windows
+          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            safe_move "*.msi" "Windows-tauron-notifier_${{ github.ref_name }}_${{ matrix.target }}.msi"
+            safe_move "*.exe" "Windows-tauron-notifier_${{ github.ref_name }}_${{ matrix.target }}.exe"
+          fi
+
+          # macOS
+          if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
+            safe_move "*.dmg" "macOS-tauron-notifier_${{ github.ref_name }}_${{ matrix.target }}.dmg"
+            safe_move "*.app.tar.gz" "macOS-tauron-notifier_${{ github.ref_name }}_${{ matrix.target }}.app.tar.gz" # If using updater
+          fi
+
+          echo "Artifacts prepared:"
+          ls -R release-artifacts
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tagName: ${{ github.ref_name }} # e.g. v0.1.0
-          releaseName: 'Tauron Notifier ${{ github.ref_name }}'
-          args: --target ${{ matrix.target }}
+          files: release-artifacts/*
+
