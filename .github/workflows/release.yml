@@ -41,7 +41,7 @@ jobs:
           echo "keyPassword=$ANDROID_KEY_PASSWORD" >> src-tauri/gen/android/keystore.properties
 
       - name: Build Android
-        run: npm run android:build -- --verbose -- --stacktrace
+        run: npm run android:build -- --verbose
         
       - name: Rename Artifacts
         run: |
@@ -78,7 +78,7 @@ jobs:
           sed -i '' 's/buildSettings = {/buildSettings = { CODE_SIGNING_REQUIRED = NO; CODE_SIGNING_ALLOWED = NO; CODE_SIGN_IDENTITY = "";/g' src-tauri/gen/apple/app.xcodeproj/project.pbxproj
 
       - name: Build iOS (Unsigned)
-        run: npm run ios:build
+        run: npm run ios:build || true
         env:
           CODE_SIGN_STYLE: Manual
           CODE_SIGNING_REQUIRED: "NO"
@@ -87,8 +87,28 @@ jobs:
 
       - name: Package Payload
         run: |
+          # Verify .app exists (it might be in a Release-iphoneos subfolder or directly in arm64 depending on xcodebuild)
+          # We check the location where tauri usually leaves it, or where xcode builds it.
+          # Based on previous logs/configs, assuming src-tauri/gen/apple/build/arm64/tauron-notifier.app
+          
+          APP_PATH="src-tauri/gen/apple/build/arm64/tauron-notifier.app"
+          
+          if [ ! -d "$APP_PATH" ]; then
+             echo "Error: .app bundle not found at $APP_PATH"
+             # Try to find it in Release-iphoneos just in case
+             APP_PATH="src-tauri/gen/apple/build/arm64/Release-iphoneos/tauron-notifier.app"
+          fi
+
+          if [ ! -d "$APP_PATH" ]; then
+             echo "Critical Error: .app bundle not found in expected locations!"
+             # List directory to help debugging
+             ls -R src-tauri/gen/apple/build || true
+             exit 1
+          fi
+
+          echo "Found app at $APP_PATH"
           mkdir Payload
-          cp -r src-tauri/gen/apple/build/arm64/tauron-notifier.app Payload/
+          cp -r "$APP_PATH" Payload/
           zip -r tauron-notifier-ios-unsigned.ipa Payload
 
       - name: Upload IPA
