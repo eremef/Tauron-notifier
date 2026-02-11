@@ -1,6 +1,6 @@
 {
   "name": "tauron-notifier",
-  "version": "1.0.0-beta",
+  "version": "1.0.0",
   "description": "Tauron outage notifier — Tauri desktop & Android app",
   "scripts": {
     "tauri": "tauri",
