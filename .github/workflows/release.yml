@@ -62,9 +62,10 @@ jobs:
         run: |
           sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' src-tauri/gen/apple/app.xcodeproj/project.pbxproj
           sed -i '' '/DEVELOPMENT_TEAM/d' src-tauri/gen/apple/app.xcodeproj/project.pbxproj
+          sed -i '' 's/buildSettings = {/buildSettings = { CODE_SIGNING_REQUIRED = NO; CODE_SIGNING_ALLOWED = NO; CODE_SIGN_IDENTITY = "";/g' src-tauri/gen/apple/app.xcodeproj/project.pbxproj
 
       - name: Build iOS (Unsigned)
-        run: npm run ios:build -- -- CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        run: npm run ios:build
         env:
           CODE_SIGN_STYLE: Manual
           CODE_SIGNING_REQUIRED: "NO"
