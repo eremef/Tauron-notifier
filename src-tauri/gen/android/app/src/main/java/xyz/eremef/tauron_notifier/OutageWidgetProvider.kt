@@ -6,6 +6,8 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
 import android.widget.RemoteViews
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,13 +25,24 @@ data class WidgetSettings(
     val cityGAID: Long,
     val streetGAID: Long,
     val houseNo: String,
-    val streetName: String
+    val streetName: String,
+    val theme: String
 )
 
 class OutageWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val ACTION_REFRESH = "xyz.eremef.tauron_notifier.ACTION_REFRESH"
+
+        // Light theme colors (from style.css :root)
+        private const val LIGHT_PRIMARY = "#D9006C"
+        private const val LIGHT_LABEL = "#666666"
+        private const val LIGHT_UPDATED = "#999999"
+
+        // Dark theme colors (from style.css [data-theme="dark"])
+        private const val DARK_PRIMARY = "#FF4DA6"
+        private const val DARK_LABEL = "#A0A0A0"
+        private const val DARK_UPDATED = "#777777"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -75,10 +88,38 @@ class OutageWidgetProvider : AppWidgetProvider() {
                 cityGAID = json.getLong("cityGAID"),
                 streetGAID = json.getLong("streetGAID"),
                 houseNo = json.getString("houseNo"),
-                streetName = json.getString("streetName")
+                streetName = json.getString("streetName"),
+                theme = json.optString("theme", "system")
             )
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun isDarkMode(context: Context, themeSetting: String): Boolean {
+        return when (themeSetting) {
+            "dark" -> true
+            "light" -> false
+            else -> {
+                // "system" or missing — follow Android system setting
+                val nightMode = context.resources.configuration.uiMode and
+                        Configuration.UI_MODE_NIGHT_MASK
+                nightMode == Configuration.UI_MODE_NIGHT_YES
+            }
+        }
+    }
+
+    private fun applyTheme(views: RemoteViews, dark: Boolean) {
+        if (dark) {
+            views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_background_dark)
+            views.setTextColor(R.id.widget_count, Color.parseColor(DARK_PRIMARY))
+            views.setTextColor(R.id.widget_label, Color.parseColor(DARK_LABEL))
+            views.setTextColor(R.id.widget_updated, Color.parseColor(DARK_UPDATED))
+        } else {
+            views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_background)
+            views.setTextColor(R.id.widget_count, Color.parseColor(LIGHT_PRIMARY))
+            views.setTextColor(R.id.widget_label, Color.parseColor(LIGHT_LABEL))
+            views.setTextColor(R.id.widget_updated, Color.parseColor(LIGHT_UPDATED))
         }
     }
 
@@ -101,6 +142,11 @@ class OutageWidgetProvider : AppWidgetProvider() {
 
         // Load settings
         val settings = loadSettings(context)
+
+        // Apply theme (even before settings are fully loaded)
+        val dark = isDarkMode(context, settings?.theme ?: "system")
+        applyTheme(views, dark)
+
         if (settings == null) {
             views.setTextViewText(R.id.widget_count, "?")
             views.setTextViewText(R.id.widget_updated, "Setup needed")
