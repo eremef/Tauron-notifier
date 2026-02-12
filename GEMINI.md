@@ -28,4 +28,5 @@
 
 ## User Rules
 
-- When you bump version, update it in `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `package.json`, `src-tauri/tauri.conf.json` using semver versioning, even when git tag is in other format, like 1.0.0b
+- When you bump version, update it in `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `package.json` using semver versioning, even when git tag is in other format, like 1.0.0b
+- when bumping `src-tauri/tauri.conf.json` use only X.X.X format, without any additional suffixes

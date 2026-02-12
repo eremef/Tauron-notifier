@@ -46,7 +46,8 @@ class OutageWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == ACTION_REFRESH) {
+        if (intent.action == ACTION_REFRESH ||
+            intent.action == Intent.ACTION_BOOT_COMPLETED) {
             val mgr = AppWidgetManager.getInstance(context)
             val ids = mgr.getAppWidgetIds(
                 ComponentName(context, OutageWidgetProvider::class.java)
@@ -73,14 +74,31 @@ class OutageWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    private fun loadSettings(context: Context): WidgetSettings? {
-        // Try filesDir first (Tauri app_data_dir usually maps here)
-        var settingsFile = File(context.filesDir, "settings.json")
-        if (!settingsFile.exists()) {
-            // Fallback to dataDir
-            settingsFile = File(context.dataDir, "settings.json")
+    private fun findSettingsFile(context: Context): File? {
+        // Build a list of candidate directories where Tauri might store settings.json
+        val candidates = mutableListOf<File>()
+
+        // 1. context.filesDir  →  /data/.../files/
+        candidates.add(File(context.filesDir, "settings.json"))
+
+        // 2. context.dataDir  →  /data/.../
+        candidates.add(File(context.dataDir, "settings.json"))
+
+        // 3. app_data subdir  →  /data/.../app_data/  (Tauri's typical app_data_dir)
+        context.filesDir.parentFile?.let { parent ->
+            candidates.add(File(parent, "app_data/settings.json"))
         }
-        if (!settingsFile.exists()) return null
+
+        // 4. Walk one level inside dataDir for any subfolder containing settings.json
+        context.dataDir.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
+            candidates.add(File(dir, "settings.json"))
+        }
+
+        return candidates.firstOrNull { it.exists() && it.canRead() }
+    }
+
+    private fun loadSettings(context: Context): WidgetSettings? {
+        val settingsFile = findSettingsFile(context) ?: return null
 
         return try {
             val json = JSONObject(settingsFile.readText())
