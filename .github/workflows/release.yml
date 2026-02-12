@@ -48,16 +48,16 @@ jobs:
         
       - name: Rename Artifacts
         run: |
-          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk tauron-notifier-Android.apk
-          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab tauron-notifier-Android.aab || true
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk tauron-notifier-android-${{ github.ref_name }}.apk
+          mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab tauron-notifier-android-${{ github.ref_name }}.aab || true
           
       - name: Upload APK
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            tauron-notifier-Android.apk
-            tauron-notifier-Android.aab
+            tauron-notifier-android-${{ github.ref_name }}.apk
+            tauron-notifier-android-${{ github.ref_name }}.aab
 
   release-ios:
     runs-on: macos-latest
@@ -118,13 +118,13 @@ jobs:
           echo "Found app at $APP_PATH"
           mkdir Payload
           cp -r "$APP_PATH" Payload/
-          zip -r tauron-notifier-ios-unsigned.ipa Payload
+          zip -r tauron-notifier-ios-${{ github.ref_name }}-unsigned.ipa Payload
 
       - name: Upload IPA
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: tauron-notifier-ios-unsigned.ipa
+          files: tauron-notifier-ios-${{ github.ref_name }}-unsigned.ipa
 
   release-desktop:
     permissions:
