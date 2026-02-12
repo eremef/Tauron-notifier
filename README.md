@@ -2,10 +2,15 @@
 
 <p align="center">
   <img width="802" height="632" alt="image" src="https://github.com/user-attachments/assets/537753c4-411d-4b76-9f5a-4709f00b56cf" />
-  <img width="200" alt="image" src="https://github.com/user-attachments/assets/93611bc3-5915-4c65-a9f0-2b4d6f9540f8" />
 </p>
 
 A desktop (Tauri) and Android app to check for planned power outages in your area using the Tauron API.
+
+# Android app
+
+<p align="center">
+  <img width="300" alt="image" src="https://github.com/user-attachments/assets/93611bc3-5915-4c65-a9f0-2b4d6f9540f8" />
+</p>
 
 ## Features
 
