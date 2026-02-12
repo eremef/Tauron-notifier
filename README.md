@@ -1,5 +1,9 @@
 # Tauron Outages Notifier
 
+<p align="center">
+<img style="margin: 0 auto" width="802" height="632" alt="image" src="https://github.com/user-attachments/assets/9e081cf2-2546-41ed-841e-3e480e728ca8" />
+</p>
+
 A desktop (Tauri) and Android app to check for planned power outages in your area using the Tauron API.
 
 ## Features
