@@ -9,7 +9,7 @@ A desktop (Tauri) and Android app to check for planned power outages in your are
 # Android app
 
 <p align="center">
-  <img width="300" alt="image" src="https://github.com/user-attachments/assets/93611bc3-5915-4c65-a9f0-2b4d6f9540f8" />
+ <img width="300" height="582" alt="image" src="https://github.com/user-attachments/assets/34bab493-a526-4615-8a1a-c2fc4b592dfe" />
 </p>
 
 ## Features
