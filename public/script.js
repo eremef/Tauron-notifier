@@ -6,25 +6,64 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Settings ──────────────────────────────────────────────
 
+let currentSettings = null;
+
 function initSettings() {
     const btn = document.getElementById('settings-btn');
     const panel = document.getElementById('settings-panel');
     const saveBtn = document.getElementById('save-settings-btn');
+    const themeSelect = document.getElementById('theme-select');
 
     btn.addEventListener('click', () => {
         panel.classList.toggle('hidden');
     });
 
     saveBtn.addEventListener('click', saveSettings);
+
+    themeSelect.addEventListener('change', async (e) => {
+        const newTheme = e.target.value;
+        applyTheme(newTheme);
+
+        // Update local state
+        if (!currentSettings) {
+            currentSettings = {
+                cityName: '',
+                streetName: '',
+                houseNo: '',
+                cityGAID: 0,
+                streetGAID: 0,
+                theme: newTheme
+            };
+        } else {
+            currentSettings.theme = newTheme;
+        }
+
+        // Auto-save
+        // We only save if we have a valid structure.
+        // Even if location is empty, we save the preference.
+        try {
+            await window.__TAURI__.core.invoke('save_settings', {
+                settings: currentSettings
+            });
+            console.log('Theme saved:', newTheme);
+        } catch (error) {
+            console.error('Failed to auto-save theme:', error);
+        }
+    });
 }
 
 async function loadSettingsAndFetch() {
     try {
         const settings = await window.__TAURI__.core.invoke('load_settings');
         if (settings) {
+            currentSettings = settings; // Store globally
             document.getElementById('city-input').value = settings.cityName;
             document.getElementById('street-input').value = settings.streetName;
             document.getElementById('house-input').value = settings.houseNo;
+            if (settings.theme) {
+                document.getElementById('theme-select').value = settings.theme;
+            }
+            applyTheme(settings.theme || 'system');
             fetchOutages();
         } else {
             // No settings yet — show setup prompt
@@ -32,6 +71,9 @@ async function loadSettingsAndFetch() {
             container.innerHTML = '<div class="no-outages">Tap ⚙️ to configure your location.</div>';
             document.getElementById('last-updated').textContent = 'Not configured';
             document.getElementById('settings-panel').classList.remove('hidden');
+
+            // Apply default system theme but don't save yet
+            applyTheme('system');
         }
     } catch (error) {
         console.error('Error loading settings:', error);
@@ -42,6 +84,7 @@ async function saveSettings() {
     const cityName = document.getElementById('city-input').value.trim();
     const streetName = document.getElementById('street-input').value.trim();
     const houseNo = document.getElementById('house-input').value.trim();
+    const theme = document.getElementById('theme-select').value;
     const status = document.getElementById('settings-status');
 
     if (!cityName || !streetName || !houseNo) {
@@ -86,15 +129,24 @@ async function saveSettings() {
 
         // Step 3: Save settings
         status.textContent = '💾 Saving...';
+
+        const newSettings = {
+            cityName,
+            streetName,
+            houseNo,
+            cityGAID: city.GAID,
+            streetGAID: street.GAID,
+            theme
+        };
+
         await window.__TAURI__.core.invoke('save_settings', {
-            settings: {
-                cityName,
-                streetName,
-                houseNo,
-                cityGAID: city.GAID,
-                streetGAID: street.GAID
-            }
+            settings: newSettings
         });
+
+        // Update global state
+        currentSettings = newSettings;
+
+        applyTheme(theme);
 
         status.textContent = `✅ Saved! City=${city.GAID}, Street=${street.GAID}`;
         status.className = 'settings-status success';
@@ -112,6 +164,32 @@ async function saveSettings() {
     } finally {
         saveBtn.disabled = false;
     }
+}
+
+function applyTheme(theme) {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+        root.setAttribute('data-theme', 'dark');
+    } else if (theme === 'light') {
+        root.setAttribute('data-theme', 'light');
+    } else {
+        // System default
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            root.setAttribute('data-theme', 'dark');
+        } else {
+            root.setAttribute('data-theme', 'light');
+        }
+    }
+}
+
+// Watch for system theme changes
+if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        const currentSetting = document.getElementById('theme-select');
+        if (currentSetting && currentSetting.value === 'system') {
+            applyTheme('system');
+        }
+    });
 }
 
 // ── Pull to Refresh ───────────────────────────────────────

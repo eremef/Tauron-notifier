@@ -23,6 +23,8 @@ pub struct Settings {
     pub houseNo: String,
     pub cityGAID: u64,
     pub streetGAID: u64,
+    #[serde(default)]
+    pub theme: Option<String>,
 }
 
 fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {

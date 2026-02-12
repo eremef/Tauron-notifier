@@ -1,10 +1,41 @@
 :root {
+    /* Light Theme (Default) */
     --primary-color: #d9006c;
     --background-color: #f4f4f9;
     --card-background: #ffffff;
-    --text-color: #333;
-    --secondary-text: #666;
+    --text-color: #333333;
+    --secondary-text: #666666;
     --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --input-border: #dddddd;
+    --input-focus: #d9006c;
+    --error-bg: #fff5f5;
+    --error-text: #c53030;
+    --error-border: #fed7d7;
+    --success-bg: #e6fffa;
+    --success-text: #047481;
+    --success-border: #b2f5ea;
+    --message-border: #eeeeee;
+    --label-border: #dddddd;
+}
+
+[data-theme="dark"] {
+    /* Dark Theme */
+    --primary-color: #ff4da6;
+    --background-color: #121212;
+    --card-background: #1e1e1e;
+    --text-color: #e0e0e0;
+    --secondary-text: #a0a0a0;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    --input-border: #444444;
+    --input-focus: #ff4da6;
+    --error-bg: #4a1515;
+    --error-text: #fc8181;
+    --error-border: #63171b;
+    --success-bg: #113639;
+    --success-text: #4fd1c5;
+    --success-border: #184e52;
+    --message-border: #333333;
+    --label-border: #444444;
 }
 
 body {
@@ -17,6 +48,7 @@ body {
     justify-content: center;
     min-height: 100vh;
     padding-bottom: env(safe-area-inset-bottom);
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .container {
@@ -61,6 +93,11 @@ h1 {
     opacity: 0.7;
     transition: opacity 0.2s;
     z-index: 10;
+    filter: grayscale(0%);
+}
+
+[data-theme="dark"] .settings-btn {
+    filter: invert(1);
 }
 
 .settings-btn:hover {
@@ -101,18 +138,22 @@ h1 {
     letter-spacing: 0.05em;
 }
 
-.settings-field input {
+.settings-field input,
+.settings-field select {
     width: 100%;
     padding: 0.6rem 0.75rem;
-    border: 1px solid #ddd;
+    border: 1px solid var(--input-border);
     border-radius: 6px;
     font-size: 0.95rem;
     font-family: inherit;
     box-sizing: border-box;
     transition: border-color 0.2s;
+    background-color: var(--card-background);
+    color: var(--text-color);
 }
 
-.settings-field input:focus {
+.settings-field input:focus,
+.settings-field select:focus {
     outline: none;
     border-color: var(--primary-color);
 }
@@ -147,11 +188,11 @@ h1 {
 }
 
 .settings-status.error {
-    color: #c53030;
+    color: var(--error-text);
 }
 
 .settings-status.success {
-    color: #047481;
+    color: var(--success-text);
 }
 
 /* ── Cards ─────────────────────────────────── */
@@ -162,7 +203,7 @@ h1 {
     padding: 0.75rem;
     margin-bottom: 0.75rem;
     box-shadow: var(--shadow);
-    transition: transform 0.2s;
+    transition: transform 0.2s, background-color 0.3s ease;
 }
 
 .card:hover {
@@ -179,6 +220,7 @@ h1 {
 .outage-time {
     font-size: 0.8rem;
     margin-bottom: 0.5rem;
+    color: var(--text-color);
 }
 
 .outage-reason {
@@ -188,19 +230,19 @@ h1 {
 .no-outages {
     text-align: center;
     padding: 1rem;
-    background-color: #e6fffa;
-    color: #047481;
+    background-color: var(--success-bg);
+    color: var(--success-text);
     border-radius: 8px;
-    border: 1px solid #b2f5ea;
+    border: 1px solid var(--success-border);
 }
 
 .error {
     text-align: center;
     padding: 2rem;
-    background-color: #fff5f5;
-    color: #c53030;
+    background-color: var(--error-bg);
+    color: var(--error-text);
     border-radius: 8px;
-    border: 1px solid #fed7d7;
+    border: 1px solid var(--error-border);
 }
 
 .loading {
@@ -220,14 +262,14 @@ h1 {
 
 .section-label.other {
     color: var(--secondary-text);
-    border-bottom-color: #ddd;
+    border-bottom-color: var(--label-border);
 }
 
 .outage-message {
     margin-top: 0.5rem;
     font-size: 0.95rem;
     color: var(--text-color);
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--message-border);
     padding-top: 0.25rem;
 }
 
