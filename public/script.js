@@ -1,8 +1,10 @@
-document.addEventListener('DOMContentLoaded', () => {
-    initSettings();
-    initPullToRefresh();
-    loadSettingsAndFetch();
-});
+if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => {
+        initSettings();
+        initPullToRefresh();
+        loadSettingsAndFetch();
+    });
+}
 
 // ── Settings ──────────────────────────────────────────────
 
@@ -246,18 +248,23 @@ async function fetchOutages() {
     }
 }
 
+function filterOutages(allOutages, streetName) {
+    if (!streetName) return [];
+    return allOutages.filter(item =>
+        item.Message && item.Message.includes(streetName)
+    );
+}
+
 function renderOutages(data, container) {
     const allOutages = data.OutageItems || [];
 
     let streetName = '';
-    const streetInput = document.getElementById('street-input');
-    if (streetInput && streetInput.value.trim()) {
-        streetName = streetInput.value.trim();
+    const streetInputEl = document.getElementById('street-input');
+    if (streetInputEl && streetInputEl.value.trim()) {
+        streetName = streetInputEl.value.trim();
     }
 
-    const localOutages = allOutages.filter(item =>
-        item.Message && item.Message.includes(streetName)
-    );
+    const localOutages = filterOutages(allOutages, streetName);
 
     container.innerHTML = '';
 
@@ -302,4 +309,12 @@ function formatDate(dateString) {
         hour: '2-digit',
         minute: '2-digit'
     });
+}
+
+// Export for tests
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        filterOutages,
+        formatDate
+    };
 }

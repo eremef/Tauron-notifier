@@ -9,9 +9,15 @@
     "android:build": "tauri android build",
     "android:dev": "tauri android dev",
     "ios:build": "tauri ios build",
-    "ios:init": "tauri ios init --ci"
+    "ios:init": "tauri ios init --ci",
+    "test": "npm run test:frontend && npm run test:backend && npm run test:android",
+    "test:frontend": "vitest run",
+    "test:backend": "cd src-tauri && cargo test",
+    "test:android": "cd src-tauri/gen/android && gradlew.bat :app:testUniversalDebugUnitTest"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.10.0"
+    "@tauri-apps/cli": "^2.10.0",
+    "jsdom": "^28.0.0",
+    "vitest": "^4.0.18"
   }
 }

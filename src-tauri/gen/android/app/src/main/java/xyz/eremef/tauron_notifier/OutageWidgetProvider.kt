@@ -20,6 +20,10 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import org.json.JSONObject
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.ExistingPeriodicWorkPolicy
+import java.util.concurrent.TimeUnit
 
 data class WidgetSettings(
     val cityGAID: Long,
@@ -33,6 +37,7 @@ class OutageWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val ACTION_REFRESH = "xyz.eremef.tauron_notifier.ACTION_REFRESH"
+        private const val WORK_NAME = "xyz.eremef.tauron_notifier.WIDGET_UPDATE_WORK"
 
         // Light theme colors (from style.css :root)
         private const val LIGHT_PRIMARY = "#D9006C"
@@ -62,6 +67,7 @@ class OutageWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        scheduleWork(context)
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -72,6 +78,26 @@ class OutageWidgetProvider : AppWidgetProvider() {
                 pendingResult.finish()
             }
         }
+    }
+
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        scheduleWork(context)
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+    }
+
+    private fun scheduleWork(context: Context) {
+        val request = PeriodicWorkRequestBuilder<WidgetUpdateWorker>(1, TimeUnit.HOURS)
+            .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
     }
 
     private fun findSettingsFile(context: Context): File? {
@@ -101,7 +127,15 @@ class OutageWidgetProvider : AppWidgetProvider() {
         val settingsFile = findSettingsFile(context) ?: return null
 
         return try {
-            val json = JSONObject(settingsFile.readText())
+            parseSettings(settingsFile.readText())
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    internal fun parseSettings(jsonString: String): WidgetSettings? {
+        return try {
+            val json = JSONObject(jsonString)
             WidgetSettings(
                 cityGAID = json.getLong("cityGAID"),
                 streetGAID = json.getLong("streetGAID"),
@@ -141,7 +175,7 @@ class OutageWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    private fun updateWidget(
+    internal fun updateWidget(
         context: Context,
         appWidgetManager: AppWidgetManager,
         appWidgetId: Int
@@ -221,14 +255,18 @@ class OutageWidgetProvider : AppWidgetProvider() {
         val response = conn.inputStream.bufferedReader().readText()
         conn.disconnect()
 
-        val json = JSONObject(response)
+        return parseOutageItems(response, settings.streetName)
+    }
+
+    internal fun parseOutageItems(jsonString: String, streetName: String): Int {
+        val json = JSONObject(jsonString)
         val items = json.optJSONArray("OutageItems") ?: return 0
 
         var count = 0
         for (i in 0 until items.length()) {
             val item = items.getJSONObject(i)
             val message = item.optString("Message", "")
-            if (message.contains(settings.streetName)) {
+            if (message.contains(streetName)) {
                 count++
             }
         }
