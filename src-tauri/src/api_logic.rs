@@ -12,7 +12,7 @@ pub struct GeoItem {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[allow(non_snake_case)]
 pub struct OutageItem {
-    pub GAID: u64,
+    pub GAID: Option<u64>,
     pub Message: Option<String>,
     pub StartDate: Option<String>,
     pub EndDate: Option<String>,
@@ -214,7 +214,7 @@ mod tests {
         let response: OutageResponse = serde_json::from_str(json).expect("Failed to parse OutageResponse");
         let items = response.OutageItems.unwrap();
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].GAID, 100);
+        assert_eq!(items[0].GAID, Some(100));
         assert_eq!(items[0].Message.as_deref(), Some("Outage at St."));
     }
 
@@ -231,7 +231,7 @@ mod tests {
         let response: OutageResponse = serde_json::from_str(json).expect("Failed to parse OutageResponse");
         let items = response.OutageItems.unwrap();
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].GAID, 101);
+        assert_eq!(items[0].GAID, Some(101));
         assert!(items[0].Message.is_none());
     }
 }

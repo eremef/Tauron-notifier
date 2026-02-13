@@ -241,15 +241,15 @@ async function fetchOutages() {
     try {
         const data = await window.__TAURI__.core.invoke('fetch_outages');
         lastUpdated.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-        renderOutages(data, container);
+        renderOutages(data, container, currentSettings);
     } catch (error) {
         console.error('Error fetching data:', error);
         container.innerHTML = `<div class="error">Failed to load outage data. Error: ${error}</div>`;
     }
 }
 
-function filterOutages(allOutages, streetName) {
-    if (!streetName) return [];
+function filterOutages(allOutages, streetName, settings) {
+    if (!allOutages) return [];
 
     // Normalize street name: remove "ul.", "al.", etc. and split into words
     const normalize = (name) => name.replace(/^(ul\.|al\.|pl\.|os\.|rondo)\s*/i, '').trim();
@@ -262,14 +262,19 @@ function filterOutages(allOutages, streetName) {
     const significantWords = fullStreet.split(/\s+/).filter(word => word.length >= 3);
 
     return allOutages.filter(item => {
-        if (!item.Message) return false;
+        // 1. Check GAID match if available
+        if (settings && settings.streetGAID && item.GAID === settings.streetGAID) {
+            return true;
+        }
+
+        if (!item.Message || !streetName) return false;
 
         const message = item.Message;
 
-        // 1. Check full street name (original behavior)
+        // 2. Check full street name (original behavior)
         if (message.includes(streetName)) return true;
 
-        // 2. Check significant words with word boundaries
+        // 3. Check significant words with word boundaries
         // This prevents "Main" from matching "Maintenance"
         return significantWords.some(word => {
             const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`);
@@ -278,16 +283,16 @@ function filterOutages(allOutages, streetName) {
     });
 }
 
-function renderOutages(data, container) {
+function renderOutages(data, container, settings) {
     const allOutages = data.OutageItems || [];
 
     let streetName = '';
-    const streetInputEl = document.getElementById('street-input');
-    if (streetInputEl && streetInputEl.value.trim()) {
-        streetName = streetInputEl.value.trim();
+    if (settings && settings.streetName) {
+        streetName = settings.streetName;
     }
 
-    const localOutages = filterOutages(allOutages, streetName);
+    const localOutages = filterOutages(allOutages, streetName, settings);
+    const localSet = new Set(localOutages);
 
     container.innerHTML = '';
 
@@ -300,9 +305,7 @@ function renderOutages(data, container) {
     }
 
     // All outages section
-    const otherOutages = allOutages.filter(item =>
-        !item.Message || !item.Message.includes(streetName)
-    );
+    const otherOutages = allOutages.filter(item => !localSet.has(item));
     if (otherOutages.length > 0) {
         container.innerHTML += `<div class="section-label other">Other outages (${otherOutages.length})</div>`;
         container.innerHTML += renderCards(otherOutages);
