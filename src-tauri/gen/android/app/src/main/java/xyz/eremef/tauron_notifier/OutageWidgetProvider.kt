@@ -262,11 +262,37 @@ class OutageWidgetProvider : AppWidgetProvider() {
         val json = JSONObject(jsonString)
         val items = json.optJSONArray("OutageItems") ?: return 0
 
+        // Normalize street name
+        // Remove "ul.", "al.", "pl.", "os.", "rondo" (case insensitive)
+        val normalizeRegex = Regex("(?i)^(ul\\.|al\\.|pl\\.|os\\.|rondo)\\s*")
+        val fullStreet = normalizeRegex.replace(streetName, "").trim()
+        
+        if (fullStreet.isEmpty()) return 0
+
+        // Significant words
+        val significantWords = fullStreet.split(Regex("\\s+"))
+            .filter { it.length >= 3 }
+
         var count = 0
         for (i in 0 until items.length()) {
             val item = items.getJSONObject(i)
             val message = item.optString("Message", "")
+            
+            // 1. Check full street name
             if (message.contains(streetName)) {
+                count++
+                continue
+            }
+
+            // 2. Check significant words with word boundaries
+            val anyMatch = significantWords.any { word ->
+                val escapedWord = java.util.regex.Pattern.quote(word)
+                // Use word boundaries \b
+                val regex = Regex("\\b$escapedWord\\b")
+                regex.containsMatchIn(message)
+            }
+
+            if (anyMatch) {
                 count++
             }
         }

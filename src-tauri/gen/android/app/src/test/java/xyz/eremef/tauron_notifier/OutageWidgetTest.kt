@@ -58,16 +58,42 @@ class OutageWidgetTest {
     }
 
     @Test
-    fun testParseOutageItemsNoMatch() {
+    fun testParseOutageItemsPartialMatch() {
         val json = """
             {
                 "OutageItems": [
-                    { "Message": "Outage at Main St, Wrocław" }
+                    { "Message": "Awaria na Probusa 5" },
+                    { "Message": "Prace na Jana Pawła II" },
+                    { "Message": "Utrudnienia na Pawła" }
                 ]
             }
         """.trimIndent()
 
-        val count = provider.parseOutageItems(json, "Rozbrat")
+        // "Henryka Probusa" -> matches "Probusa"
+        var count = provider.parseOutageItems(json, "Henryka Probusa")
+        assertEquals(1, count)
+
+        // "Jana Pawła II" -> matches "Pawła" and "Jana Pawła"
+        count = provider.parseOutageItems(json, "Jana Pawła II")
+        assertEquals(2, count)
+    }
+
+    @Test
+    fun testParseOutageItemsNoMatch() {
+        val json = """
+            {
+                "OutageItems": [
+                    { "Message": "Maintenance work in progress" },
+                    { "Message": "Other outage" }
+                ]
+            }
+        """.trimIndent()
+
+        // "Main" matching "Maintenance" should fail due to word boundaries
+        val count = provider.parseOutageItems(json, "Main St")
         assertEquals(0, count)
+        
+        val count2 = provider.parseOutageItems(json, "Rozbrat")
+        assertEquals(0, count2)
     }
 }

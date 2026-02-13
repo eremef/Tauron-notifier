@@ -5,14 +5,26 @@ const { filterOutages, formatDate } = require('../public/script.js');
 describe('Frontend Logic', () => {
     describe('filterOutages', () => {
         const mockOutages = [
-            { Message: 'Planned outage at Rozbrat 12, Wrocław' },
-            { Message: 'Maintenance on Legnicka 5, Wrocław' }
+            { Message: 'Planned outage at Henryka Probusa 12, Wrocław' },
+            { Message: 'Awaria na Probusa 5' },
+            { Message: 'Maintenance on Legnicka 5, Wrocław' },
+            { Message: 'Prace na Jana Pawła II' },
+            { Message: 'Utrudnienia na Pawła' }
         ];
 
-        it('finds outages matching the street name', () => {
-            const filtered = filterOutages(mockOutages, 'Rozbrat');
-            expect(filtered).toHaveLength(1);
-            expect(filtered[0].Message).toContain('Rozbrat');
+        it('finds outages matching the full street name', () => {
+            const filtered = filterOutages(mockOutages, 'Henryka Probusa');
+            expect(filtered.some(o => o.Message.includes('Henryka Probusa'))).toBe(true);
+        });
+
+        it('finds outages matching the short street name (last part)', () => {
+            const filtered = filterOutages(mockOutages, 'Henryka Probusa');
+            expect(filtered.some(o => o.Message.includes('Awaria na Probusa'))).toBe(true);
+        });
+
+        it('finds outages matching significant parts (ignoring short words)', () => {
+            const filtered = filterOutages(mockOutages, 'Jana Pawła II');
+            expect(filtered.some(o => o.Message.includes('Pawła'))).toBe(true);
         });
 
         it('returns empty array when no match found', () => {

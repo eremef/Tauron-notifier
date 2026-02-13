@@ -250,9 +250,32 @@ async function fetchOutages() {
 
 function filterOutages(allOutages, streetName) {
     if (!streetName) return [];
-    return allOutages.filter(item =>
-        item.Message && item.Message.includes(streetName)
-    );
+
+    // Normalize street name: remove "ul.", "al.", etc. and split into words
+    const normalize = (name) => name.replace(/^(ul\.|al\.|pl\.|os\.|rondo)\s*/i, '').trim();
+    const fullStreet = normalize(streetName);
+
+    if (!fullStreet) return [];
+
+    // Significant words are those with length >= 3
+    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const significantWords = fullStreet.split(/\s+/).filter(word => word.length >= 3);
+
+    return allOutages.filter(item => {
+        if (!item.Message) return false;
+
+        const message = item.Message;
+
+        // 1. Check full street name (original behavior)
+        if (message.includes(streetName)) return true;
+
+        // 2. Check significant words with word boundaries
+        // This prevents "Main" from matching "Maintenance"
+        return significantWords.some(word => {
+            const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`);
+            return regex.test(message);
+        });
+    });
 }
 
 function renderOutages(data, container) {
