@@ -23,6 +23,7 @@ pub struct OutageItem {
 #[allow(non_snake_case)]
 pub struct OutageResponse {
     pub OutageItems: Option<Vec<OutageItem>>,
+    pub debug_query: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

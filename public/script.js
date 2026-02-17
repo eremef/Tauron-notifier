@@ -240,6 +240,9 @@ async function fetchOutages() {
 
     try {
         const data = await window.__TAURI__.core.invoke('fetch_outages');
+        if (data.debug_query) {
+            console.log('Fetch Outages Query:', data.debug_query);
+        }
         lastUpdated.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
         renderOutages(data, container, currentSettings);
     } catch (error) {
@@ -284,7 +287,15 @@ function filterOutages(allOutages, streetName, settings) {
 }
 
 function renderOutages(data, container, settings) {
-    const allOutages = data.OutageItems || [];
+    const rawOutages = data.OutageItems || [];
+    const now = new Date();
+
+    // Global Filter: remove finished outages
+    const allOutages = rawOutages.filter(item => {
+        if (!item.EndDate) return true;
+        const end = new Date(item.EndDate);
+        return isNaN(end.getTime()) || end > now;
+    });
 
     let streetName = '';
     if (settings && settings.streetName) {

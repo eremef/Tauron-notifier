@@ -113,9 +113,15 @@ async fn fetch_outages(app: AppHandle) -> Result<api_logic::OutageResponse, Stri
         return Err(format!("HTTP error! status: {}", res.status()));
     }
 
-    let data = res.json::<api_logic::OutageResponse>()
+    let mut data = res.json::<api_logic::OutageResponse>()
         .await
         .map_err(|e| e.to_string())?;
+
+    let query_str = query.iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<_>>()
+        .join("&");
+    data.debug_query = Some(format!("{}/outages/address?{}", BASE_URL, query_str));
 
     Ok(data)
 }

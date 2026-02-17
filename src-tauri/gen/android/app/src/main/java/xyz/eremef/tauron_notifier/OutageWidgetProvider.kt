@@ -274,8 +274,32 @@ class OutageWidgetProvider : AppWidgetProvider() {
             .filter { it.length >= 3 }
 
         var count = 0
+        val now = Date()
+        // Try parsing different common formats returned by the API
+        val formats = listOf(
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") },
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US),
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+        )
+
         for (i in 0 until items.length()) {
             val item = items.getJSONObject(i)
+            
+            // 0. Filter out finished outages
+            val endDateStr = item.optString("EndDate", "")
+            if (endDateStr.isNotEmpty()) {
+                var parsedDate: Date? = null
+                for (fmt in formats) {
+                    try {
+                        parsedDate = fmt.parse(endDateStr)
+                        if (parsedDate != null) break
+                    } catch (e: Exception) {}
+                }
+                if (parsedDate != null && parsedDate.before(now)) {
+                    continue
+                }
+            }
+
             val message = item.optString("Message", "")
             
             // 1. Check full street name
