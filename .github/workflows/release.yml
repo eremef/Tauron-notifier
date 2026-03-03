@@ -52,7 +52,7 @@ jobs:
           mv src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab tauron-notifier-android-${{ github.ref_name }}.aab || true
           
       - name: Upload APK
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.4.2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -121,7 +121,7 @@ jobs:
           zip -r tauron-notifier-ios-${{ github.ref_name }}-unsigned.ipa Payload
 
       - name: Upload IPA
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.4.2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: tauron-notifier-ios-${{ github.ref_name }}-unsigned.ipa
@@ -222,7 +222,7 @@ jobs:
           ls -R release-artifacts
 
       - name: Upload Release Assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.4.2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: release-artifacts/*
