@@ -7,6 +7,10 @@
 
 A desktop (Tauri) and Android app to check for planned power outages in your area using the Tauron API.
 
+## Downloads
+
+https://eremef.xyz/tauron-notifier
+
 ## Android app
 
 <p align="center">
