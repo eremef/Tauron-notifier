@@ -1,5 +1,7 @@
 # AWARIA - Aplikacja Wygodnego Alarmowanie o Remontach i Infrastrukturalnych Awariach
 
+[English](README.md) | [Polski](README.pl.md)
+
 <p align="center">
   <img height="600" alt="image" src="https://github.com/user-attachments/assets/eb73cb38-e146-4d16-a93d-af7c2662549c" />
 </p>
