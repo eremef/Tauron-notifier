@@ -12,7 +12,7 @@ import org.robolectric.annotation.Config
 @Config(manifest = Config.NONE)
 class OutageWidgetTest {
 
-    private val provider = OutageWidgetProvider()
+    private val provider = TauronWidgetProvider()
 
     @Test
     fun testParseSettings() {

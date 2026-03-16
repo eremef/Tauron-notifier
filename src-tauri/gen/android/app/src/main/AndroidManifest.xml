@@ -25,16 +25,29 @@
         </activity>
 
         <receiver
-            android:name=".OutageWidgetProvider"
+            android:name=".TauronWidgetProvider"
             android:exported="true"
-            android:label="AWARIA Widget">
+            android:label="Tauron">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="xyz.eremef.awaria.ACTION_REFRESH" />
+                <action android:name="xyz.eremef.awaria.ACTION_REFRESH_TAURON" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_outage_info" />
+                android:resource="@xml/widget_tauron_info" />
+        </receiver>
+
+        <receiver
+            android:name=".MpwikWidgetProvider"
+            android:exported="true"
+            android:label="MPWiK">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="xyz.eremef.awaria.ACTION_REFRESH_MPWIK" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_mpwik_info" />
         </receiver>
 
         <provider

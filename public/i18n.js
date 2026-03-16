@@ -3,7 +3,7 @@
 
 const translations = {
     en: {
-        "title": "AWARIA",
+        "title": "Awaria",
         "settings_appearance": "Appearance",
         "settings_theme": "Theme",
         "theme_system": "System Default",
@@ -57,7 +57,7 @@ const translations = {
         "lbl_other_alerts_divider": "Other alerts"
     },
     pl: {
-        "title": "AWARIA",
+        "title": "Awaria",
         "settings_appearance": "Wygląd",
         "settings_theme": "Motyw",
         "theme_system": "Domyślny systemowy",

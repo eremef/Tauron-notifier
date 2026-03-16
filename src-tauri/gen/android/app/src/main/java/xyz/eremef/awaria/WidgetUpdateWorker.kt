@@ -13,12 +13,21 @@ class WidgetUpdateWorker(
 
     override suspend fun doWork(): Result {
         val appWidgetManager = AppWidgetManager.getInstance(context)
-        val componentName = ComponentName(context, OutageWidgetProvider::class.java)
-        val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
+        
+        // Update Tauron widgets
+        val tauronName = ComponentName(context, TauronWidgetProvider::class.java)
+        val tauronIds = appWidgetManager.getAppWidgetIds(tauronName)
+        val tauronProvider = TauronWidgetProvider()
+        for (id in tauronIds) {
+            tauronProvider.updateWidget(context, appWidgetManager, id)
+        }
 
-        val provider = OutageWidgetProvider()
-        for (appWidgetId in appWidgetIds) {
-            provider.updateWidget(context, appWidgetManager, appWidgetId)
+        // Update MPWiK widgets
+        val mpwikName = ComponentName(context, MpwikWidgetProvider::class.java)
+        val mpwikIds = appWidgetManager.getAppWidgetIds(mpwikName)
+        val mpwikProvider = MpwikWidgetProvider()
+        for (id in mpwikIds) {
+            mpwikProvider.updateWidget(context, appWidgetManager, id)
         }
 
         return Result.success()

@@ -31,10 +31,11 @@ https://eremef.xyz/awaria
   - **Modern Interface**: Indigo-based "friendly" UI with vibrant source indicators (Rose/Sky).
   - **Collapsible categories**: Organized view of "Your Location" vs "Other Outages".
   - **Responsive Dark/Light mode**: Native transition support.
-- **Android Widget**:
-  - Aggregated outage count for your specific street.
-  - One-tap refresh.
-  - Shared configuration with the main app.
+- **Android Widgets**:
+  - **Individual Source Widgets**: Separate widgets for Power (Tauron) and Water (MPWiK).
+  - **Optimized Layout**: Compact 1x1 design showing alert counts for your specific street.
+  - **One-tap refresh**: Tap the widget to trigger an immediate update.
+  - **Shared configuration**: Settings sync automatically from the main app.
 - **Privacy First**: No cloud accounts. Your location and settings stay on your device.
 
 ## Prerequisites
@@ -95,7 +96,7 @@ The APK will be located at:
 
 - **Frontend**: Vanilla HTML/JS/CSS in `public/`. Indigo design system with custom HSL tokens.
 - **Backend (Rust)**: `src-tauri/src/lib.rs` orchestrates asynchronous fetching from multiple APIs and converts them to a `UnifiedAlert` format.
-- **Android Widget**: Native implementation in `OutageWidgetProvider.kt` that sums alerts from all enabled providers.
+- **Android Widgets**: Native implementation utilizing a `BaseWidgetProvider` with specific providers for each utility (`TauronWidgetProvider`, `MpwikWidgetProvider`). Includes a `WorkManager` background worker for periodic updates.
 
 ## Settings
 

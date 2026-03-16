@@ -8,13 +8,21 @@
     android:orientation="vertical"
     android:padding="4dp">
 
+    <ImageView
+        android:id="@+id/widget_icon"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:layout_marginBottom="1dp"
+        android:src="@drawable/ic_electricity"
+        android:contentDescription="icon" />
+
     <TextView
-        android:id="@+id/widget_count"
+        android:id="@+id/widget _count"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="–"
         android:textColor="#D9006C"
-        android:textSize="24sp"
+        android:textSize="12sp"
         android:textStyle="bold" />
 
     <TextView
@@ -23,7 +31,7 @@
         android:layout_height="wrap_content"
         android:text="outages"
         android:textColor="#666666"
-        android:textSize="10sp" />
+        android:textSize="8sp" />
 
     <TextView
         android:id="@+id/widget_updated"
