@@ -11,6 +11,8 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.widget.RemoteViews
+import android.util.SizeF
+import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -79,6 +81,23 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
                 for (appWidgetId in appWidgetIds) {
                     updateWidget(context, appWidgetManager, appWidgetId)
                 }
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
+
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: android.os.Bundle
+    ) {
+        super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                updateWidget(context, appWidgetManager, appWidgetId)
             } finally {
                 pendingResult.finish()
             }
@@ -184,8 +203,60 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetId: Int
     ) {
-        val views = RemoteViews(context.packageName, R.layout.widget_outage)
+        val settings = loadSettings(context)
+        val language = settings?.language ?: "system"
+        val dark = isDarkMode(context, settings?.theme ?: "system")
 
+        val count = try {
+            if (settings != null) fetchCount(settings).toString() else "?"
+        } catch (e: Exception) { "!" }
+
+        val updatedAt = if (count != "?" && count != "!") {
+            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+            timeFormat.format(Date())
+        } else if (settings == null) {
+            getTranslation("setup", language)
+        } else {
+            "Error"
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val viewMapping = mapOf(
+                SizeF(40f, 40f) to createRemoteViews(context, R.layout.widget_outage_small, count, updatedAt, language, dark),
+                SizeF(100f, 100f) to createRemoteViews(context, R.layout.widget_outage, count, updatedAt, language, dark),
+                SizeF(200f, 200f) to createRemoteViews(context, R.layout.widget_outage_large, count, updatedAt, language, dark)
+            )
+            val views = RemoteViews(viewMapping)
+            appWidgetManager.updateAppWidget(appWidgetId, views)
+        } else {
+            // Legacy: pick best layout based on current options
+            val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
+            val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
+            val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
+            
+            val layoutId = if (minWidth < 100 || minHeight < 100) {
+                R.layout.widget_outage_small
+            } else if (minWidth < 200 || minHeight < 200) {
+                R.layout.widget_outage
+            } else {
+                R.layout.widget_outage_large
+            }
+            
+            val views = createRemoteViews(context, layoutId, count, updatedAt, language, dark)
+            appWidgetManager.updateAppWidget(appWidgetId, views)
+        }
+    }
+
+    private fun createRemoteViews(
+        context: Context,
+        layoutId: Int,
+        count: String,
+        updatedAt: String,
+        language: String,
+        dark: Boolean
+    ): RemoteViews {
+        val views = RemoteViews(context.packageName, layoutId)
+        
         val refreshIntent = Intent(context, this::class.java).apply {
             action = refreshAction
         }
@@ -194,38 +265,13 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         views.setOnClickPendingIntent(R.id.widget_root, refreshPending)
-
-        val settings = loadSettings(context)
-        val dark = isDarkMode(context, settings?.theme ?: "system")
+        
         applyTheme(views, dark)
-
-        val language = settings?.language ?: "system"
         views.setTextViewText(R.id.widget_label, getTranslation("alerts", language))
-
-        if (settings == null) {
-            views.setTextViewText(R.id.widget_count, "?")
-            views.setTextViewText(R.id.widget_updated, getTranslation("setup", language))
-            appWidgetManager.updateAppWidget(appWidgetId, views)
-            return
-        }
-
-        views.setTextViewText(R.id.widget_count, "…")
-        views.setTextViewText(R.id.widget_updated, getTranslation("updating", language))
-        appWidgetManager.updateAppWidget(appWidgetId, views)
-
-        try {
-            val count = fetchCount(settings)
-            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-            val updatedAt = timeFormat.format(Date())
-
-            views.setTextViewText(R.id.widget_count, count.toString())
-            views.setTextViewText(R.id.widget_updated, updatedAt)
-        } catch (e: Exception) {
-            views.setTextViewText(R.id.widget_count, "!")
-            val errMsg = (e.message ?: "Unknown").take(20)
-            views.setTextViewText(R.id.widget_updated, errMsg)
-        }
-        appWidgetManager.updateAppWidget(appWidgetId, views)
+        views.setTextViewText(R.id.widget_count, count)
+        views.setTextViewText(R.id.widget_updated, updatedAt)
+        
+        return views
     }
 
     protected fun fetchTauronAlertCount(settings: WidgetSettings): Int {
