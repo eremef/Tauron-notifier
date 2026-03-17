@@ -6,7 +6,7 @@
   <img height="600" alt="image" src="https://github.com/user-attachments/assets/eb73cb38-e146-4d16-a93d-af7c2662549c" />
 </p>
 
-A modern desktop (Tauri) and Android application providing real-time alerts for planned and emergency outages. **AWARIA** aggregates data from multiple utility providers into a centralized, beautiful interface.
+A modern desktop (Tauri) and Android application providing real-time alerts for planned and emergency outages. **AWARIA** aggregates data from multiple utility providers into a centralized interface.
 
 ## Downloads
 
