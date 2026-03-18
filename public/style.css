@@ -512,7 +512,7 @@ h1 {
     width: 100%;
     padding: 0.75rem;
     background: var(--primary-color);
-    color: white;
+    color: var(--background-color);
     border: none;
     border-radius: 10px;
     font-size: 0.95rem;
