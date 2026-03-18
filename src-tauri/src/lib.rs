@@ -5,7 +5,7 @@ use tauri::AppHandle;
 use tauri::Manager;
 use chrono::{Utc, SecondsFormat};
 use api_logic::{
-    GeoItem, Settings, UnifiedAlert, BASE_URL, MPWIK_URL,
+    GeoItem, Settings, UnifiedAlert, BASE_URL, MPWIK_URL, FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID,
     get_cities_query, get_streets_query, get_outages_query,
     save_settings_to_path, load_settings_from_path
 };
@@ -158,6 +158,43 @@ async fn fetch_water_alerts() -> Result<Vec<UnifiedAlert>, String> {
 }
 
 #[command]
+async fn fetch_fortum_alerts() -> Result<Vec<UnifiedAlert>, String> {
+    let client = build_client()?;
+    
+    let planned_url = format!("{}?cityGuid={}&regionId={}&current=false", FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID);
+    let current_url = format!("{}?cityGuid={}&regionId={}&current=true", FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID);
+    
+    let (planned_res, current_res) = tokio::join!(
+        client.get(&planned_url).header("accept", "application/json").send(),
+        client.get(&current_url).header("accept", "application/json").send()
+    );
+
+    let planned_data: api_logic::FortumResponse = planned_res
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let current_data: api_logic::FortumResponse = current_res
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut seen_ids = std::collections::HashSet::new();
+    let mut all_points = planned_data.points;
+    all_points.extend(current_data.points);
+    
+    let alerts: Vec<UnifiedAlert> = all_points
+        .into_iter()
+        .filter(|p| seen_ids.insert(p.switch_off_id.clone()))
+        .map(|p| p.to_unified())
+        .collect();
+
+    Ok(alerts)
+}
+
+#[command]
 async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
     let path = settings_path(&app)?;
     let settings = load_settings_from_path(&path)?;
@@ -177,6 +214,12 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
     match fetch_water_alerts().await {
         Ok(water_alerts) => all_alerts.extend(water_alerts),
         Err(e) => errors.push(format!("MPWiK: {}", e)),
+    }
+
+    // Fetch Fortum alerts (Wrocław only, no settings needed)
+    match fetch_fortum_alerts().await {
+        Ok(fortum_alerts) => all_alerts.extend(fortum_alerts),
+        Err(e) => errors.push(format!("Fortum: {}", e)),
     }
 
     if all_alerts.is_empty() && !errors.is_empty() {
@@ -247,6 +290,7 @@ pub fn run() {
         fetch_outages,
         fetch_all_alerts,
         fetch_water_alerts,
+        fetch_fortum_alerts,
         lookup_city,
         lookup_street,
         save_settings,

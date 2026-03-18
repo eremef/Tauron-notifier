@@ -25,6 +25,8 @@
     /* Rose 500 */
     --water-color: #0ea5e9;
     /* Sky 500 */
+    --fortum-color: #00a859;
+    /* Fortum Green */
 }
 
 [data-theme="dark"] {
@@ -56,6 +58,8 @@
     /* Gray */
     --water-color: #18a8e0;
     /* Gray */
+    --fortum-color: #00c86b;
+    /* Fortum Green */
 }
 
 [data-theme="emerald"] {
@@ -465,12 +469,24 @@ h1 {
     border-top: 4px solid var(--water-color);
 }
 
+.card.source-fortum {
+    border-top: 4px solid var(--fortum-color);
+}
+
+.card:not(.source-tauron):not(.source-water):not(.source-fortum) {
+    border-top: 4px solid #7c7c7c;
+}
+
 .card.source-tauron .outage-type {
     color: var(--tauron-color);
 }
 
 .card.source-water .outage-type {
     color: var(--water-color);
+}
+
+.card.source-fortum .outage-type {
+    color: var(--fortum-color);
 }
 
 

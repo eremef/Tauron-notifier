@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 
 pub const BASE_URL: &str = "https://www.tauron-dystrybucja.pl/waapi";
 pub const MPWIK_URL: &str = "https://www.mpwik.wroc.pl/wp-admin/admin-ajax.php";
+pub const FORTUM_URL: &str = "https://formularz.fortum.pl/api/v1/switchoffs";
+pub const FORTUM_CITY_GUID: &str = "d06e8606-f1d7-eb11-bacb-000d3aa9626e";
+pub const FORTUM_REGION_ID: u32 = 3;
 
 // ── Alert source abstraction ──────────────────────────────
 
@@ -10,6 +13,7 @@ pub const MPWIK_URL: &str = "https://www.mpwik.wroc.pl/wp-admin/admin-ajax.php";
 pub enum AlertSource {
     Tauron,
     Water,
+    Fortum,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -24,16 +28,33 @@ pub struct UnifiedAlert {
 
 // ── MPWiK (water) types ───────────────────────────────────
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MpwikFailureItem {
     pub content: Option<String>,
     pub date_start: Option<String>,
     pub date_end: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MpwikResponse {
     pub failures: Option<Vec<MpwikFailureItem>>,
+}
+
+// ── Fortum types ─────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct FortumResponse {
+    #[serde(default)]
+    pub points: Vec<FortumPoint>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FortumPoint {
+    pub switch_off_id: String,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub message: Option<String>,
 }
 
 /// Parse MPWiK date format "DD-MM-YYYY HH:mm" into ISO "YYYY-MM-DDTHH:mm:00".
@@ -56,15 +77,21 @@ impl MpwikFailureItem {
     pub fn to_unified(&self) -> UnifiedAlert {
         UnifiedAlert {
             source: AlertSource::Water,
-            startDate: self
-                .date_start
-                .as_deref()
-                .and_then(parse_mpwik_date),
-            endDate: self
-                .date_end
-                .as_deref()
-                .and_then(parse_mpwik_date),
+            startDate: self.date_start.as_deref().and_then(parse_mpwik_date),
+            endDate: self.date_end.as_deref().and_then(parse_mpwik_date),
             message: self.content.clone(),
+            description: None,
+        }
+    }
+}
+
+impl FortumPoint {
+    pub fn to_unified(&self) -> UnifiedAlert {
+        UnifiedAlert {
+            source: AlertSource::Fortum,
+            startDate: self.start_date.clone(),
+            endDate: self.end_date.clone(),
+            message: self.message.clone(),
             description: None,
         }
     }
@@ -129,7 +156,11 @@ pub fn get_cities_query(city_name: &str, cache_bust: &str) -> Vec<(&'static str,
     ]
 }
 
-pub fn get_streets_query(street_name: &str, city_gaid: u64, cache_bust: &str) -> Vec<(&'static str, String)> {
+pub fn get_streets_query(
+    street_name: &str,
+    city_gaid: u64,
+    cache_bust: &str,
+) -> Vec<(&'static str, String)> {
     vec![
         ("partName", street_name.to_string()),
         ("ownerGAID", city_gaid.to_string()),
@@ -169,7 +200,8 @@ pub fn load_settings_from_path(path: &std::path::Path) -> Result<Option<Settings
     if data.trim().is_empty() {
         return Ok(None);
     }
-    let settings: Settings = serde_json::from_str(&data).map_err(|e| format!("Settings parse error (might be empty/corrupt): {}", e))?;
+    let settings: Settings = serde_json::from_str(&data)
+        .map_err(|e| format!("Settings parse error (might be empty/corrupt): {}", e))?;
     Ok(Some(settings))
 }
 
@@ -223,7 +255,7 @@ mod tests {
     fn test_settings_persistence() {
         let temp_dir = std::env::temp_dir();
         let test_path = temp_dir.join("test_settings.json");
-        
+
         let settings = Settings {
             cityName: "TestCity".to_string(),
             streetName: "TestStreet".to_string(),
@@ -236,7 +268,7 @@ mod tests {
 
         // Save
         save_settings_to_path(&test_path, &settings).expect("Failed to save settings");
-        
+
         // Load
         let loaded = load_settings_from_path(&test_path).expect("Failed to load settings");
         assert_eq!(Some(settings), loaded);
@@ -279,7 +311,8 @@ mod tests {
         }"#;
         std::fs::write(&test_path, legacy_json).unwrap();
 
-        let loaded = load_settings_from_path(&test_path).expect("Should handle missing optional fields");
+        let loaded =
+            load_settings_from_path(&test_path).expect("Should handle missing optional fields");
         assert!(loaded.is_some());
         let s = loaded.unwrap();
         assert_eq!(s.cityName, "Legacy");
@@ -301,7 +334,8 @@ mod tests {
                 }
             ]
         }"#;
-        let response: OutageResponse = serde_json::from_str(json).expect("Failed to parse OutageResponse");
+        let response: OutageResponse =
+            serde_json::from_str(json).expect("Failed to parse OutageResponse");
         let items = response.OutageItems.unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].GAID, Some(100));
@@ -318,7 +352,8 @@ mod tests {
                 }
             ]
         }"#;
-        let response: OutageResponse = serde_json::from_str(json).expect("Failed to parse OutageResponse");
+        let response: OutageResponse =
+            serde_json::from_str(json).expect("Failed to parse OutageResponse");
         let items = response.OutageItems.unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].GAID, Some(101));
@@ -364,4 +399,3 @@ mod tests {
         assert_eq!(unified.description, Some("Testing".to_string()));
     }
 }
-

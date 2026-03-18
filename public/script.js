@@ -39,7 +39,7 @@ function initSettings() {
                 streetGAID: 0,
                 theme: newTheme,
                 language: 'system',
-                enabledSources: ['tauron', 'water']
+                enabledSources: ['tauron', 'water', 'fortum']
             };
         } else {
             currentSettings.theme = newTheme;
@@ -65,7 +65,7 @@ function initSettings() {
                 streetGAID: 0,
                 theme: 'system',
                 language: newLang,
-                enabledSources: ['tauron', 'water']
+                enabledSources: ['tauron', 'water', 'fortum']
             };
         } else {
             currentSettings.language = newLang;
@@ -85,13 +85,14 @@ function initSettings() {
         document.getElementById('location-settings-collapsible').classList.toggle('collapsed');
     });
 
-    ['source-tauron-check', 'source-water-check'].forEach(id => {
+    ['source-tauron-check', 'source-water-check', 'source-fortum-check'].forEach(id => {
         const checkbox = document.getElementById(id);
         checkbox.addEventListener('change', () => {
             if (!currentSettings) return;
             const enabledSources = [];
             if (document.getElementById('source-tauron-check').checked) enabledSources.push('tauron');
             if (document.getElementById('source-water-check').checked) enabledSources.push('water');
+            if (document.getElementById('source-fortum-check').checked) enabledSources.push('fortum');
             currentSettings.enabledSources = enabledSources;
             autoSaveSettings().then(() => {
                 const container = document.getElementById('outages-container');
@@ -138,9 +139,10 @@ async function loadSettingsAndFetch() {
             applyTheme(settings.theme || 'system');
             
             // Set alert sources
-            const sources = settings.enabledSources || ['tauron', 'water'];
+            const sources = settings.enabledSources || ['tauron', 'water', 'fortum'];
             document.getElementById('source-tauron-check').checked = sources.includes('tauron');
             document.getElementById('source-water-check').checked = sources.includes('water');
+            document.getElementById('source-fortum-check').checked = sources.includes('fortum');
 
             // Collapse location if it looks valid
             if (settings.cityName && settings.cityGAID && settings.streetGAID) {
@@ -228,6 +230,7 @@ async function saveSettings() {
         };
         if (document.getElementById('source-tauron-check').checked) newSettings.enabledSources.push('tauron');
         if (document.getElementById('source-water-check').checked) newSettings.enabledSources.push('water');
+        if (document.getElementById('source-fortum-check').checked) newSettings.enabledSources.push('fortum');
 
         await window.__TAURI__.core.invoke('save_settings', {
             settings: newSettings
@@ -411,7 +414,7 @@ function renderAlerts(alerts, container, settings) {
     const now = new Date();
 
     // Filter by enabled sources and finished status
-    const enabledSources = (settings && settings.enabledSources) ? settings.enabledSources : ['tauron', 'water'];
+    const enabledSources = (settings && settings.enabledSources) ? settings.enabledSources : ['tauron', 'water', 'fortum'];
     const activeAlerts = alerts.filter(item => {
         // Source filter
         if (!enabledSources.includes(item.source)) return false;
@@ -425,6 +428,7 @@ function renderAlerts(alerts, container, settings) {
     // Group by source
     const tauronAlerts = activeAlerts.filter(a => a.source === 'tauron');
     const waterAlerts = activeAlerts.filter(a => a.source === 'water');
+    const fortumAlerts = activeAlerts.filter(a => a.source === 'fortum');
 
     // For Tauron, split into local vs other
     const streetName = (settings && settings.streetName) ? settings.streetName : '';
@@ -451,23 +455,29 @@ function renderAlerts(alerts, container, settings) {
     const localWaterSet = new Set(localWater);
     const otherWater = waterAlerts.filter(a => !localWaterSet.has(a));
 
+    // Fortum alerts (Wrocław only - currently no local filtering)
+    const localFortum = streetName ? filterAlerts(fortumAlerts, streetName) : [];
+    const localFortumSet = new Set(localFortum);
+    const otherFortum = fortumAlerts.filter(a => !localFortumSet.has(a));
+
     container.innerHTML = '';
 
-    const hasLocalAlerts = localTauron.length > 0 || localWater.length > 0;
+    const hasLocalAlerts = localTauron.length > 0 || localWater.length > 0 || localFortum.length > 0;
 
     // ── Your Location section ──
     if (hasLocalAlerts) {
         const lblYourLoc = typeof t !== 'undefined' ? t('lbl_your_location') : 'Your location';
-        container.innerHTML += `<div class="section-label">${lblYourLoc} (${localTauron.length + localWater.length})</div>`;
+        container.innerHTML += `<div class="section-label">${lblYourLoc} (${localTauron.length + localWater.length + localFortum.length})</div>`;
         container.innerHTML += renderCards(localTauron, 'tauron');
         container.innerHTML += renderCards(localWater, 'water');
+        container.innerHTML += renderCards(localFortum, 'fortum');
     } else {
         const msgNoLoc = typeof t !== 'undefined' ? t('msg_no_outages_local') : 'No planned outages for your location.';
         container.innerHTML += `<div class="no-outages">${msgNoLoc}</div>`;
     }
 
     // ── Other Alerts Divider ──
-    if (otherTauron.length > 0 || otherWater.length > 0) {
+    if (otherTauron.length > 0 || otherWater.length > 0 || otherFortum.length > 0) {
         const lblDivider = typeof t !== 'undefined' ? t('lbl_other_alerts_divider') : 'Other alerts';
         container.innerHTML += `<div class="other-divider"><span>${lblDivider}</span></div>`;
     }
@@ -504,6 +514,22 @@ function renderAlerts(alerts, container, settings) {
         `;
     }
 
+    // ── Other Fortum section ──
+    if (otherFortum.length > 0) {
+        const lblSection = typeof t !== 'undefined' ? t('lbl_section_fortum') : 'Power (Fortum)';
+        container.innerHTML += `
+            <div class="collapsible source-fortum collapsed">
+                <div class="section-label other" onclick="this.parentElement.classList.toggle('collapsed')">
+                    <span>${lblSection} (${otherFortum.length})</span>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="collapsible-content">
+                    ${renderCards(otherFortum, 'fortum')}
+                </div>
+            </div>
+        `;
+    }
+
 
     // If nothing at all
     if (activeAlerts.length === 0) {
@@ -515,6 +541,8 @@ function renderAlerts(alerts, container, settings) {
 function renderCards(alerts, source) {
     const sourceLabel = source === 'water'
         ? (typeof t !== 'undefined' ? t('source_water') : '💧 Water Outage')
+        : source === 'fortum'
+        ? (typeof t !== 'undefined' ? t('source_fortum') : '⚡ Fortum Outage')
         : (typeof t !== 'undefined' ? t('source_tauron') : '⚡ Power Outage');
 
     return alerts.map(item => `

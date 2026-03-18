@@ -15,8 +15,8 @@ https://eremef.xyz/awaria
 ## Supported Sources
 
 - **⚡ Power (Tauron)**: Planned maintenance and emergency power outages.
+- **⚡ Power (Fortum)**: Planned and current power outages (Wrocław area).
 - **💧 Water (MPWiK)**: Water failures and maintenance work (currently Wrocław area).
-- *More sources coming soon...*
 
 ## Android app
 
@@ -34,7 +34,7 @@ https://eremef.xyz/awaria
   - **Collapsible categories**: Organized view of "Your Location" vs "Other Outages".
   - **Responsive Dark/Light mode**: Native transition support.
 - **Android Widgets**:
-  - **Individual Source Widgets**: Separate widgets for Power (Tauron) and Water (MPWiK).
+  - **Individual Source Widgets**: Separate widgets for Power (Tauron, Fortum) and Water (MPWiK).
   - **Optimized Layout**: Compact 1x1 design showing alert counts for your specific street.
   - **One-tap refresh**: Tap the widget to trigger an immediate update.
   - **Shared configuration**: Settings sync automatically from the main app.

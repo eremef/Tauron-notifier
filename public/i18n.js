@@ -48,12 +48,15 @@ const translations = {
         "lbl_planned_outage": "Planned Outage",
         "source_tauron": "⚡ Power Outage",
         "source_water": "💧 Water Outage",
+        "source_fortum": "⚡ Fortum Outage",
         "lbl_section_tauron": "Power (Tauron)",
         "lbl_section_water": "Water (MPWiK)",
+        "lbl_section_fortum": "Power (Fortum)",
         "msg_no_alerts": "No active alerts.",
         "settings_sources": "Alert Sources",
         "source_tauron_short": "Power (Tauron)",
         "source_water_short": "Water (MPWiK)",
+        "source_fortum_short": "Power (Fortum)",
         "lbl_other_alerts_divider": "Other alerts"
     },
     pl: {
@@ -102,12 +105,15 @@ const translations = {
         "lbl_planned_outage": "Planowane wyłączenie",
         "source_tauron": "⚡ Wyłączenie prądu",
         "source_water": "💧 Awaria wody",
+        "source_fortum": "⚡ Wyłączenie prądu (Fortum)",
         "lbl_section_tauron": "Prąd (Tauron)",
         "lbl_section_water": "Woda (MPWiK)",
+        "lbl_section_fortum": "Prąd (Fortum)",
         "msg_no_alerts": "Brak aktywnych alertów.",
         "settings_sources": "Źródła alertów",
         "source_tauron_short": "Prąd (Tauron)",
         "source_water_short": "Woda (MPWiK)",
+        "source_fortum_short": "Prąd (Fortum)",
         "lbl_other_alerts_divider": "Inne alerty"
     }
 };
