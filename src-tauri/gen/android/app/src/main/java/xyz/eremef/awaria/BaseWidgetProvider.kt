@@ -333,6 +333,80 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         return parseMpwikItems(response, settings.streetName)
     }
 
+    protected fun fetchFortumAlertCount(settings: WidgetSettings): Int {
+        val cityGuid = "d06e8606-f1d7-eb11-bacb-000d3aa9626e"
+        val regionId = "3"
+        
+        val plannedUrl = URL("https://formularz.fortum.pl/api/v1/switchoffs?cityGuid=$cityGuid&regionId=$regionId&current=false")
+        val currentUrl = URL("https://formularz.fortum.pl/api/v1/switchoffs?cityGuid=$cityGuid&regionId=$regionId&current=true")
+
+        val plannedResponse = fetchJson(plannedUrl)
+        val currentResponse = fetchJson(currentUrl)
+
+        val plannedCount = parseFortumItems(plannedResponse, settings.streetName)
+        val currentCount = parseFortumItems(currentResponse, settings.streetName)
+
+        return plannedCount + currentCount
+    }
+
+    private fun fetchJson(url: URL): String {
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "GET"
+        conn.setRequestProperty("accept", "application/json")
+        conn.connectTimeout = 10000
+        conn.readTimeout = 10000
+
+        val responseCode = conn.responseCode
+        if (responseCode !in 200..299) {
+            conn.disconnect()
+            throw Exception("Fortum HTTP error: $responseCode")
+        }
+
+        val response = conn.inputStream.bufferedReader().readText()
+        conn.disconnect()
+        return response
+    }
+
+    internal fun parseFortumItems(jsonString: String, streetName: String): Int {
+        val json = JSONObject(jsonString)
+        val items = json.optJSONArray("points") ?: return 0
+        val normalizeRegex = Regex("(?i)^(ul\\.|al\\.|pl\\.|os\\.|rondo)\\s*")
+        val fullStreet = normalizeRegex.replace(streetName, "").trim()
+        if (fullStreet.isEmpty()) return 0
+        val significantWords = fullStreet.split(Regex("\\s+")).filter { it.length >= 3 }
+        var count = 0
+        val now = Date()
+        val seenIds = mutableSetOf<String>()
+        val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+        
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            val switchOffId = item.optString("switchOffId", "")
+            if (switchOffId in seenIds) continue
+            seenIds.add(switchOffId)
+            
+            val endDateStr = item.optString("endDate", "")
+            if (endDateStr.isNotEmpty()) {
+                try {
+                    val end = isoFormat.parse(endDateStr)
+                    if (end != null && end.before(now)) continue
+                } catch (e: Exception) {}
+            }
+            
+            val message = item.optString("message", "")
+            if (message.contains(streetName)) {
+                count++; continue
+            }
+            val anyMatch = significantWords.any { word ->
+                val escapedWord = java.util.regex.Pattern.quote(word)
+                val regex = Regex("\\b$escapedWord\\b")
+                regex.containsMatchIn(message)
+            }
+            if (anyMatch) count++
+        }
+        return count
+    }
+
     internal fun parseMpwikItems(jsonString: String, streetName: String): Int {
         val json = JSONObject(jsonString)
         val items = json.optJSONArray("failures") ?: return 0

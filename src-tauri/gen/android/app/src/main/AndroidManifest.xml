@@ -50,6 +50,19 @@
                 android:resource="@xml/widget_mpwik_info" />
         </receiver>
 
+        <receiver
+            android:name=".FortumWidgetProvider"
+            android:exported="true"
+            android:label="Fortum">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="xyz.eremef.awaria.ACTION_REFRESH_FORTUM" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_fortum_info" />
+        </receiver>
+
         <provider
           android:name="androidx.core.content.FileProvider"
           android:authorities="${applicationId}.fileprovider"
