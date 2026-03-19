@@ -17,6 +17,7 @@ pub enum AlertSource {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[allow(non_snake_case)]
 pub struct UnifiedAlert {
     pub source: AlertSource,
     pub startDate: Option<String>,
