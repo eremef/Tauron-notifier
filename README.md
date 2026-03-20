@@ -1,4 +1,4 @@
-# AWARIA - Aplikacja Wygodnego Alarmowanie o Remontach i Infrastrukturalnych Awariach
+# AWARIA - Application for Warning and Alerting of Repairs and Infrastructure Accidents
 
 [English](README.md) | [Polski](README.pl.md)
 
