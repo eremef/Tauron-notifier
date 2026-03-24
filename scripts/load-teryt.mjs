@@ -37,8 +37,7 @@ function createSchema(db) {
       gmi       INTEGER,
       rodz      INTEGER,
       nazwa     TEXT NOT NULL,
-      nazwa_dod TEXT,
-      stan_na   TEXT NOT NULL
+      nazwa_dod TEXT
     );
 
     CREATE TABLE simc (
@@ -46,12 +45,10 @@ function createSchema(db) {
       pow      INTEGER NOT NULL,
       gmi      INTEGER NOT NULL,
       rodz_gmi INTEGER NOT NULL,
-      rm       TEXT NOT NULL,
-      mz       INTEGER NOT NULL,
+      rm       INTEGER NOT NULL,
       nazwa    TEXT NOT NULL,
-      sym      TEXT NOT NULL,
-      sympod   TEXT NOT NULL,
-      stan_na  TEXT NOT NULL
+      sym      INTEGER NOT NULL,
+      sympod   INTEGER NOT NULL
     );
 
     CREATE TABLE ulic (
@@ -59,13 +56,22 @@ function createSchema(db) {
       pow      INTEGER NOT NULL,
       gmi      INTEGER NOT NULL,
       rodz_gmi INTEGER NOT NULL,
-      sym      TEXT NOT NULL,
-      sym_ul   TEXT NOT NULL,
+      sym      INTEGER NOT NULL,
+      sym_ul   INTEGER NOT NULL,
       cecha    TEXT,
       nazwa_1  TEXT NOT NULL,
-      nazwa_2  TEXT,
-      stan_na  TEXT NOT NULL
+      nazwa_2  TEXT
     );
+
+    CREATE TABLE rodz_miej (
+      rm      INTEGER NOT NULL,
+      nazwa   TEXT NOT NULL
+    );    
+
+    CREATE TABLE rodz_gmi (
+      rodz_gmi INTEGER NOT NULL,
+      nazwa   TEXT NOT NULL
+    );    
 
     CREATE INDEX idx_terc_codes ON terc (woj, pow, gmi, rodz);
 
@@ -79,10 +85,20 @@ function createSchema(db) {
   `);
 }
 
+function loadDictionaries(db) {
+
+  const tx = db.transaction(() => {
+    db.prepare("INSERT INTO rodz_miej (rm, nazwa) VALUES (0, 'część miejscowości'),(1, 'wieś'),(2, 'kolonia'),(3, 'przysiółek'),(4, 'osada'),(5, 'osada leśna'),(6, 'osiedle'),(7, 'schronisko turystyczne'),(95, 'dzielnica m. st. Warszawy'),(96, 'miasto'),(98, 'delegatura'),(99, 'część miasta')").run();
+    db.prepare("INSERT INTO rodz_gmi (rodz_gmi, nazwa) VALUES (1, 'gmina miejska'),(2, 'gmina wiejska'),(3, 'gmina miejsko-wiejska'),(4, 'miasto w gminie miejsko-wiejskiej'),(5, 'obszar wiejski w gminie miejsko-wiejskiej'),(8, 'dzielnice '),(9, 'delegatura')").run();
+  });
+  tx();
+  return true
+}
+
 function loadTerc(db) {
   const { rows } = parseCsv(CSV_FILES.terc);
   const stmt = db.prepare(
-    "INSERT INTO terc (woj, pow, gmi, rodz, nazwa, nazwa_dod, stan_na) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO terc (woj, pow, gmi, rodz, nazwa, nazwa_dod) VALUES (?, ?, ?, ?, ?, ?)"
   );
   const tx = db.transaction((rows) => {
     for (const r of rows) {
@@ -92,8 +108,7 @@ function loadTerc(db) {
         r.GMI ? parseInt(r.GMI, 10) : null,
         r.RODZ ? parseInt(r.RODZ, 10) : null,
         r.NAZWA,
-        r.NAZWA_DOD || null,
-        r.STAN_NA
+        r.NAZWA_DOD || null
       );
     }
   });
@@ -104,7 +119,7 @@ function loadTerc(db) {
 function loadSimc(db) {
   const { rows } = parseCsv(CSV_FILES.simc);
   const stmt = db.prepare(
-    "INSERT INTO simc (woj, pow, gmi, rodz_gmi, rm, mz, nazwa, sym, sympod, stan_na) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO simc (woj, pow, gmi, rodz_gmi, rm, nazwa, sym, sympod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   );
   const tx = db.transaction((rows) => {
     for (const r of rows) {
@@ -113,12 +128,10 @@ function loadSimc(db) {
         parseInt(r.POW, 10),
         parseInt(r.GMI, 10),
         parseInt(r.RODZ_GMI, 10),
-        r.RM,
-        parseInt(r.MZ, 10),
+        parseInt(r.RM, 10),
         r.NAZWA,
-        r.SYM,
-        r.SYMPOD,
-        r.STAN_NA
+        parseInt(r.SYM, 10),
+        parseInt(r.SYMPOD, 10),
       );
     }
   });
@@ -129,7 +142,7 @@ function loadSimc(db) {
 function loadUlic(db) {
   const { rows } = parseCsv(CSV_FILES.ulic);
   const stmt = db.prepare(
-    "INSERT INTO ulic (woj, pow, gmi, rodz_gmi, sym, sym_ul, cecha, nazwa_1, nazwa_2, stan_na) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO ulic (woj, pow, gmi, rodz_gmi, sym, sym_ul, cecha, nazwa_1, nazwa_2) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   const tx = db.transaction((rows) => {
     for (const r of rows) {
@@ -138,12 +151,11 @@ function loadUlic(db) {
         parseInt(r.POW, 10),
         parseInt(r.GMI, 10),
         parseInt(r.RODZ_GMI, 10),
-        r.SYM,
-        r.SYM_UL,
+        parseInt(r.SYM, 10),
+        parseInt(r.SYM_UL, 10),
         r.CECHA || null,
         r.NAZWA_1,
-        r.NAZWA_2 || null,
-        r.STAN_NA
+        r.NAZWA_2 || null
       );
     }
   });
@@ -167,6 +179,10 @@ db.pragma("journal_mode = WAL");
 
 console.log("Creating schema...");
 createSchema(db);
+
+console.log("Loading dictionaries...");
+loadDictionaries(db);
+console.log("  → OK");
 
 console.log("Loading TERC...");
 const tercCount = loadTerc(db);
