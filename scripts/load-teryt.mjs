@@ -86,13 +86,8 @@ function createSchema(db) {
 }
 
 function loadDictionaries(db) {
-
-  const tx = db.transaction(() => {
-    db.prepare("INSERT INTO rodz_miej (rm, nazwa) VALUES (0, 'część miejscowości'),(1, 'wieś'),(2, 'kolonia'),(3, 'przysiółek'),(4, 'osada'),(5, 'osada leśna'),(6, 'osiedle'),(7, 'schronisko turystyczne'),(95, 'dzielnica m. st. Warszawy'),(96, 'miasto'),(98, 'delegatura'),(99, 'część miasta')").run();
-    db.prepare("INSERT INTO rodz_gmi (rodz_gmi, nazwa) VALUES (1, 'gmina miejska'),(2, 'gmina wiejska'),(3, 'gmina miejsko-wiejska'),(4, 'miasto w gminie miejsko-wiejskiej'),(5, 'obszar wiejski w gminie miejsko-wiejskiej'),(8, 'dzielnice '),(9, 'delegatura')").run();
-  });
-  tx();
-  return true
+  db.exec(`INSERT INTO rodz_miej (rm, nazwa) VALUES (0, 'część miejscowości'),(1, 'wieś'),(2, 'kolonia'),(3, 'przysiółek'),(4, 'osada'),(5, 'osada leśna'),(6, 'osiedle'),(7, 'schronisko turystyczne'),(95, 'dzielnica m. st. Warszawy'),(96, 'miasto'),(98, 'delegatura'),(99, 'część miasta')`);
+  db.exec(`INSERT INTO rodz_gmi (rodz_gmi, nazwa) VALUES (1, 'gmina miejska'),(2, 'gmina wiejska'),(3, 'gmina miejsko-wiejska'),(4, 'miasto w gminie miejsko-wiejskiej'),(5, 'obszar wiejski w gminie miejsko-wiejskiej'),(8, 'dzielnice '),(9, 'delegatura')`);
 }
 
 function loadTerc(db) {
@@ -163,6 +158,17 @@ function loadUlic(db) {
   return rows.length;
 }
 
+function fixData(db) {
+  db.exec(`update simc as osiedle
+            set sympod = miasto.sym
+            from simc as miasto 
+            where miasto.woj = osiedle.woj 
+            and miasto.pow = osiedle.pow
+            and miasto.rodz_gmi not in (8, 9)
+            and osiedle.rodz_gmi in (8, 9)
+            and osiedle.rm <> 99`);
+}
+
 // --- Main ---
 if (existsSync(DB_PATH)) {
   try {
@@ -195,6 +201,10 @@ console.log(`  → ${simcCount} rows`);
 console.log("Loading ULIC...");
 const ulicCount = loadUlic(db);
 console.log(`  → ${ulicCount} rows`);
+
+console.log("Fixing data...");
+fixData(db);
+console.log(`  → OK`);
 
 db.pragma("journal_mode = DELETE");
 db.close();
