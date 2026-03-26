@@ -29,3 +29,4 @@ chrono = "0.4.43"
 tokio = { version = "1.49.0", features = ["full"] }
 dirs = "5.0"
 regex = "1.10"
+rusqlite = { version = "0.31", features = ["bundled"] }

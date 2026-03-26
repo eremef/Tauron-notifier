@@ -31,6 +31,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "assets/teryt": "assets/teryt"
+    },
     "macOS": {
       "minimumSystemVersion": "11.0",
       "exceptionDomain": "",

@@ -102,12 +102,14 @@
                         <div class="settings-field">
                             <label for="city-input" data-i18n="settings_city">City</label>
                             <input type="text" id="city-input" data-i18n="settings_city_placeholder"
-                                placeholder="e.g. Wrocław">
+                                placeholder="e.g. Wrocław" autocomplete="off">
+                            <div id="city-suggestions" class="suggestions-dropdown hidden"></div>
                         </div>
                         <div class="settings-field">
                             <label for="street-input" data-i18n="settings_street">Street</label>
                             <input type="text" id="street-input" data-i18n="settings_street_placeholder"
-                                placeholder="e.g. Kuźnicza">
+                                placeholder="e.g. Kuźnicza" autocomplete="off" disabled>
+                            <div id="street-suggestions" class="suggestions-dropdown hidden"></div>
                         </div>
                         <div class="settings-field">
                             <label for="house-input" data-i18n="settings_house">House No</label>

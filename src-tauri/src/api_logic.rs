@@ -1,6 +1,6 @@
+use crate::tauron::OutageItem;
 use serde::{Deserialize, Serialize};
 
-pub const BASE_URL: &str = "https://www.tauron-dystrybucja.pl/waapi";
 pub const MPWIK_URL: &str = "https://www.mpwik.wroc.pl/wp-admin/admin-ajax.php";
 pub const FORTUM_URL: &str = "https://formularz.fortum.pl/api/v1/switchoffs";
 pub const FORTUM_CITY_GUID: &str = "d06e8606-f1d7-eb11-bacb-000d3aa9626e";
@@ -118,60 +118,45 @@ impl OutageItem {
         }
     }
 
-    pub fn matches_street(&self, street_name: &str) -> bool {
+    pub fn matches_street(&self, street_name_1: &str, street_name_2: &Option<String>) -> bool {
         let Some(message) = &self.Message else {
             return false;
         };
 
-        if message.contains(street_name) {
-            return true;
+        fn word_match(text: &str, word: &str) -> bool {
+            let pattern = format!(r"(?i)\b{}\b", regex::escape(word));
+            regex::Regex::new(&pattern)
+                .map(|r| r.is_match(text))
+                .unwrap_or(false)
         }
 
-        let normalized = street_name
-            .trim_start_matches("ul.")
-            .trim_start_matches("al.")
-            .trim_start_matches("pl.")
-            .trim_start_matches("os.")
-            .trim_start_matches("rondo ")
-            .trim();
+        // Build priority list: compound name first (if nazwa_2 exists), then individual words
+        let mut candidates: Vec<String> = Vec::new();
 
-        let significant_words: Vec<&str> = normalized
-            .split_whitespace()
-            .filter(|w: &&str| w.len() >= 3)
-            .collect();
+        if let Some(n2) = street_name_2 {
+            let compound = format!("{} {}", n2.trim(), street_name_1.trim());
+            candidates.push(compound);
+        }
 
-        significant_words.iter().any(|word| {
-            let regex = format!(r"(?i)\b{}\b", regex::escape(word));
-            regex::Regex::new(&regex)
-                .map(|r| r.is_match(message))
-                .unwrap_or(false)
-        })
+        // Add significant individual words (>= 3 chars)
+        for word in street_name_1.split_whitespace() {
+            if word.len() >= 3 {
+                candidates.push(word.to_string());
+            }
+        }
+        if let Some(n2) = street_name_2 {
+            for word in n2.split_whitespace() {
+                if word.len() >= 3 {
+                    candidates.push(word.to_string());
+                }
+            }
+        }
+
+        candidates.iter().any(|c| word_match(message, c))
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-#[allow(non_snake_case)]
-pub struct GeoItem {
-    pub GAID: u64,
-    pub Name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[allow(non_snake_case)]
-pub struct OutageItem {
-    pub GAID: Option<u64>,
-    pub Message: Option<String>,
-    pub StartDate: Option<String>,
-    pub EndDate: Option<String>,
-    pub Description: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[allow(non_snake_case)]
-pub struct OutageResponse {
-    pub OutageItems: Option<Vec<OutageItem>>,
-    pub debug_query: Option<String>,
-}
+// ── Address & Settings ────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct AddressEntry {
@@ -180,12 +165,16 @@ pub struct AddressEntry {
     pub city_name: String,
     #[serde(rename = "streetName")]
     pub street_name: String,
+    #[serde(rename = "streetName1", default)]
+    pub street_name_1: String,
+    #[serde(rename = "streetName2", default)]
+    pub street_name_2: Option<String>,
     #[serde(rename = "houseNo")]
     pub house_no: String,
-    #[serde(rename = "cityGAID")]
-    pub city_gaid: u64,
-    #[serde(rename = "streetGAID")]
-    pub street_gaid: u64,
+    #[serde(rename = "cityId", default)]
+    pub city_id: Option<u64>,
+    #[serde(rename = "streetId", default)]
+    pub street_id: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -200,16 +189,6 @@ pub struct Settings {
     pub language: Option<String>,
     #[serde(default, rename = "enabledSources")]
     pub enabled_sources: Option<Vec<String>>,
-    #[serde(default, skip_deserializing, rename = "cityName")]
-    pub city_name: String,
-    #[serde(default, skip_deserializing, rename = "streetName")]
-    pub street_name: String,
-    #[serde(default, skip_deserializing, rename = "houseNo")]
-    pub house_no: String,
-    #[serde(default, skip_deserializing, rename = "cityGAID")]
-    pub city_gaid: u64,
-    #[serde(default, skip_deserializing, rename = "streetGAID")]
-    pub street_gaid: u64,
 }
 
 impl Default for Settings {
@@ -224,71 +203,8 @@ impl Default for Settings {
                 "water".to_string(),
                 "fortum".to_string(),
             ]),
-            city_name: String::new(),
-            street_name: String::new(),
-            house_no: String::new(),
-            city_gaid: 0,
-            street_gaid: 0,
         }
     }
-}
-
-// impl Settings {
-//     pub fn migrate_legacy(&mut self) {
-//         if self.addresses.is_empty() && (self.city_gaid > 0 || !self.city_name.is_empty()) {
-//             self.addresses.push(AddressEntry {
-//                 name: "Address 1".to_string(),
-//                 city_name: self.city_name.clone(),
-//                 street_name: self.street_name.clone(),
-//                 house_no: self.house_no.clone(),
-//                 city_gaid: self.city_gaid,
-//                 street_gaid: self.street_gaid,
-//             });
-//             self.primary_address_index = Some(0);
-//         }
-//         self.city_name = String::new();
-//         self.street_name = String::new();
-//         self.house_no = String::new();
-//         self.city_gaid = 0;
-//         self.street_gaid = 0;
-//     }
-// }
-
-pub fn get_cities_query(city_name: &str, cache_bust: &str) -> Vec<(&'static str, String)> {
-    vec![
-        ("partName", city_name.to_string()),
-        ("_", cache_bust.to_string()),
-    ]
-}
-
-pub fn get_streets_query(
-    street_name: &str,
-    city_gaid: u64,
-    cache_bust: &str,
-) -> Vec<(&'static str, String)> {
-    vec![
-        ("partName", street_name.to_string()),
-        ("ownerGAID", city_gaid.to_string()),
-        ("_", cache_bust.to_string()),
-    ]
-}
-
-pub fn get_outages_query(
-    city_gaid: u64,
-    street_gaid: u64,
-    house_no: &str,
-    from_date: &str,
-    cache_bust: &str,
-) -> Vec<(&'static str, String)> {
-    vec![
-        ("cityGAID", city_gaid.to_string()),
-        ("streetGAID", street_gaid.to_string()),
-        ("houseNo", house_no.to_string()),
-        ("fromDate", from_date.to_string()),
-        ("getLightingSupport", "false".to_string()),
-        ("getServicedSwitchingoff", "true".to_string()),
-        ("_", cache_bust.to_string()),
-    ]
 }
 
 pub fn save_settings_to_path(path: &std::path::Path, settings: &Settings) -> Result<(), String> {
@@ -317,11 +233,6 @@ mod tests {
     #[test]
     fn test_settings_serialization() {
         let settings = Settings {
-            city_name: "Wrocław".to_string(),
-            street_name: "Kuźnicza".to_string(),
-            house_no: "25".to_string(),
-            city_gaid: 123,
-            street_gaid: 456,
             theme: Some("dark".to_string()),
             language: Some("pl".to_string()),
             ..Default::default()
@@ -332,29 +243,20 @@ mod tests {
     }
 
     #[test]
-    fn test_cities_query() {
-        let query = get_cities_query("Wro", "12345");
-        assert_eq!(query.len(), 2);
-        assert_eq!(query[0], ("partName", "Wro".to_string()));
-        assert_eq!(query[1], ("_", "12345".to_string()));
-    }
-
-    #[test]
-    fn test_streets_query() {
-        let query = get_streets_query("Roz", 123, "12345");
-        assert_eq!(query.len(), 3);
-        assert_eq!(query[0], ("partName", "Roz".to_string()));
-        assert_eq!(query[1], ("ownerGAID", "123".to_string()));
-        assert_eq!(query[2], ("_", "12345".to_string()));
-    }
-
-    #[test]
-    fn test_outages_query() {
-        let query = get_outages_query(123, 456, "5", "2024-01-01", "12345");
-        assert_eq!(query.len(), 7);
-        assert_eq!(query[0], ("cityGAID", "123".to_string()));
-        assert_eq!(query[1], ("streetGAID", "456".to_string()));
-        assert_eq!(query[2], ("houseNo", "5".to_string()));
+    fn test_address_entry_with_teryt_ids() {
+        let addr = AddressEntry {
+            name: "Home".to_string(),
+            city_name: "Wrocław".to_string(),
+            street_name: "ul. Kuźnicza".to_string(),
+            street_name_1: "Kuźnicza".to_string(),
+            street_name_2: None,
+            house_no: "25".to_string(),
+            city_id: Some(969400),
+            street_id: Some(13900),
+        };
+        let json = serde_json::to_string(&addr).unwrap();
+        let deserialized: AddressEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(addr, deserialized);
     }
 
     #[test]
@@ -363,24 +265,15 @@ mod tests {
         let test_path = temp_dir.join("test_settings.json");
 
         let settings = Settings {
-            city_name: "TestCity".to_string(),
-            street_name: "TestStreet".to_string(),
-            house_no: "10".to_string(),
-            city_gaid: 111,
-            street_gaid: 222,
             theme: Some("light".to_string()),
             language: Some("en".to_string()),
             ..Default::default()
         };
 
-        // Save
         save_settings_to_path(&test_path, &settings).expect("Failed to save settings");
-
-        // Load
         let loaded = load_settings_from_path(&test_path).expect("Failed to load settings");
         assert_eq!(Some(settings), loaded);
 
-        // Cleanup
         std::fs::remove_file(test_path).ok();
     }
 
@@ -389,82 +282,6 @@ mod tests {
         let test_path = std::path::Path::new("non_existent_settings.json");
         let loaded = load_settings_from_path(test_path).expect("Failed to load settings");
         assert_eq!(None, loaded);
-    }
-
-    #[test]
-    fn test_load_corrupt_settings() {
-        let temp_dir = std::env::temp_dir();
-        let test_path = temp_dir.join("corrupt_settings.json");
-        std::fs::write(&test_path, "{ invalid json }").unwrap();
-
-        let result = load_settings_from_path(&test_path);
-        assert!(result.is_err());
-        // Just verify it's an error, exact message can vary
-
-        std::fs::remove_file(test_path).ok();
-    }
-
-    #[test]
-    fn test_load_legacy_settings_missing_fields() {
-        let temp_dir = std::env::temp_dir();
-        let test_path = temp_dir.join("legacy_settings.json");
-        // Theme is optional, but let's see if we missing other fields how it behaves
-        let legacy_json = r#"{
-            "cityName": "Legacy",
-            "streetName": "Old St",
-            "houseNo": "1",
-            "cityGAID": 1,
-            "streetGAID": 2
-        }"#;
-        std::fs::write(&test_path, legacy_json).unwrap();
-
-        let loaded =
-            load_settings_from_path(&test_path).expect("Should handle missing optional fields");
-        assert!(loaded.is_some());
-        let s = loaded.unwrap();
-        assert_eq!(s.city_name, "Legacy");
-        assert_eq!(s.theme, None); // Should default to None
-
-        std::fs::remove_file(test_path).ok();
-    }
-
-    #[test]
-    fn test_parse_outage_response() {
-        let json = r#"{
-            "OutageItems": [
-                {
-                    "GAID": 100,
-                    "Message": "Outage at St.",
-                    "StartDate": "2024-01-01T10:00:00",
-                    "EndDate": "2024-01-01T12:00:00",
-                    "Description": "Testing"
-                }
-            ]
-        }"#;
-        let response: OutageResponse =
-            serde_json::from_str(json).expect("Failed to parse OutageResponse");
-        let items = response.OutageItems.unwrap();
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].GAID, Some(100));
-        assert_eq!(items[0].Message.as_deref(), Some("Outage at St."));
-    }
-
-    #[test]
-    fn test_parse_incomplete_outage_response() {
-        // Test that we handle missing optional fields gracefully
-        let json = r#"{
-            "OutageItems": [
-                {
-                    "GAID": 101
-                }
-            ]
-        }"#;
-        let response: OutageResponse =
-            serde_json::from_str(json).expect("Failed to parse OutageResponse");
-        let items = response.OutageItems.unwrap();
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].GAID, Some(101));
-        assert!(items[0].Message.is_none());
     }
 
     #[test]

@@ -1,18 +1,18 @@
-SELECT woj.nazwa woj,
-    pow.nazwa pow,
-    gmi.nazwa gmi,
-    miasto.nazwa miasto,
-    miasto.sym
-FROM simc miasto
-    LEFT JOIN terc woj ON miasto.woj = woj.woj
-    AND woj.pow is null
-    AND woj.gmi is null
-    LEFT JOIN terc pow ON miasto.woj = pow.woj
-    AND miasto.pow = pow.pow
-    AND pow.gmi is null
-    LEFT JOIN terc gmi ON miasto.woj = gmi.woj
-    AND miasto.pow = gmi.pow
-    AND miasto.gmi = gmi.gmi
-    AND miasto.rodz_gmi = gmi.rodz
-WHERE miasto.sym = miasto.sympod
-    AND miasto.nazwa = 'Poznań';
+SELECT voivodeship.nazwa voivodeship,
+    district.nazwa district,
+    commune.nazwa commune,
+    city.nazwa city,
+    city.sym city_id
+FROM simc city
+    LEFT JOIN terc voivodeship ON city.woj = voivodeship.woj
+    AND voivodeship.pow is null
+    AND voivodeship.gmi is null
+    LEFT JOIN terc district ON city.woj = district.woj
+    AND city.pow = district.pow
+    AND district.gmi is null
+    LEFT JOIN terc commune ON city.woj = commune.woj
+    AND city.pow = commune.pow
+    AND city.gmi = commune.gmi
+    AND city.rodz_gmi = commune.rodz
+WHERE city.sym = city.sympod
+    AND city.nazwa = 'Poznań';

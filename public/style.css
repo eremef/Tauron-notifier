@@ -918,3 +918,60 @@ h1 {
     gap: 0.5rem;
     margin-top: 0.5rem;
 }
+
+/* ── TERYT Suggestions Dropdown ─────────────────────────── */
+
+.suggestions-dropdown {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--card-background);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    margin-top: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.suggestion-item {
+    padding: 0.6rem 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid var(--message-border);
+    transition: background 0.15s;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover,
+.suggestion-item:active {
+    background: var(--message-border);
+}
+
+.suggestion-item.no-results {
+    cursor: default;
+    color: var(--secondary-text);
+    font-style: italic;
+}
+
+.suggestion-item.no-results:hover {
+    background: transparent;
+}
+
+.suggestion-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.suggestion-detail {
+    font-size: 0.8rem;
+    color: var(--secondary-text);
+    margin-top: 2px;
+}
+
+.settings-field {
+    position: relative;
+}

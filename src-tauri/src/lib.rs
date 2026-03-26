@@ -1,14 +1,20 @@
 mod api_logic;
+mod tauron;
+mod teryt;
 
 use tauri::command;
 use tauri::AppHandle;
 use tauri::Manager;
 use chrono::{Utc, SecondsFormat};
 use api_logic::{
-    GeoItem, Settings, AddressEntry, UnifiedAlert, BASE_URL, MPWIK_URL, FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID,
-    get_cities_query, get_streets_query, get_outages_query,
+    Settings, AddressEntry, UnifiedAlert, MPWIK_URL, FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID,
     save_settings_to_path, load_settings_from_path
 };
+use tauron::{
+    GeoItem, OutageResponse, BASE_URL,
+    build_client,
+};
+use teryt::{TerytCity, TerytStreet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -18,21 +24,21 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir.join("settings.json"))
 }
 
-fn build_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .build()
-        .map_err(|e| e.to_string())
-}
+// ── Tauron API lookups (internal, for outage fetching) ───
 
-#[command]
-async fn lookup_city(city_name: String) -> Result<Vec<GeoItem>, String> {
+async fn lookup_city(city_name: &str) -> Result<Vec<GeoItem>, String> {
     let client = build_client()?;
     let cache_bust = Utc::now().timestamp_millis().to_string();
-    let query = get_cities_query(&city_name, &cache_bust);
+    let encoded_name = city_name.replace(' ', "%20");
+    let url = format!(
+        "{}/enum/geo/cities?partName={}&_={}",
+        BASE_URL, encoded_name, cache_bust
+    );
+
+    log::debug!("Tauron API: GET {}", url);
 
     let res = client
-        .get(&format!("{}/enum/geo/cities", BASE_URL))
-        .query(&query)
+        .get(&url)
         .header("accept", "application/json")
         .header("x-requested-with", "XMLHttpRequest")
         .header("Referer", "https://www.tauron-dystrybucja.pl/wylaczenia")
@@ -47,15 +53,19 @@ async fn lookup_city(city_name: String) -> Result<Vec<GeoItem>, String> {
     res.json().await.map_err(|e| e.to_string())
 }
 
-#[command]
-async fn lookup_street(street_name: String, city_gaid: u64) -> Result<Vec<GeoItem>, String> {
+async fn lookup_street(street_name: &str, city_gaid: u64) -> Result<Vec<GeoItem>, String> {
     let client = build_client()?;
     let cache_bust = Utc::now().timestamp_millis().to_string();
-    let query = get_streets_query(&street_name, city_gaid, &cache_bust);
+    let encoded_name = street_name.replace(' ', "%20");
+    let url = format!(
+        "{}/enum/geo/streets?partName={}&ownerGAID={}&_={}",
+        BASE_URL, encoded_name, city_gaid, cache_bust
+    );
+
+    log::debug!("Tauron API: GET {}", url);
 
     let res = client
-        .get(&format!("{}/enum/geo/streets", BASE_URL))
-        .query(&query)
+        .get(&url)
         .header("accept", "application/json")
         .header("x-requested-with", "XMLHttpRequest")
         .header("Referer", "https://www.tauron-dystrybucja.pl/wylaczenia")
@@ -69,6 +79,24 @@ async fn lookup_street(street_name: String, city_gaid: u64) -> Result<Vec<GeoIte
 
     res.json().await.map_err(|e| e.to_string())
 }
+
+// ── TERYT local lookups ───────────────────────────────────
+
+#[command]
+async fn teryt_lookup_city(app: AppHandle, city_name: String) -> Result<Vec<TerytCity>, String> {
+    teryt::lookup_cities(&app, &city_name)
+}
+
+#[command]
+async fn teryt_lookup_street(
+    app: AppHandle,
+    city_id: u64,
+    street_name: String,
+) -> Result<Vec<TerytStreet>, String> {
+    teryt::lookup_streets(&app, city_id, &street_name)
+}
+
+// ── Settings persistence ──────────────────────────────────
 
 #[command]
 async fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
@@ -159,42 +187,50 @@ async fn update_address(app: AppHandle, index: usize, address: AddressEntry) -> 
     Ok(settings)
 }
 
-#[command]
-async fn fetch_outages_for_address(index: usize) -> Result<api_logic::OutageResponse, String> {
-    let path = settings_path_from_app()?;
-    let settings = load_settings_from_path(&path)?
-        .ok_or_else(|| "No settings configured. Please set up your location first.".to_string())?;
+// ── Outage fetching ───────────────────────────────────────
 
-    let address = settings.addresses.get(index)
-        .ok_or_else(|| "Invalid address index".to_string())?;
+async fn fetch_tauron_outages(address: &AddressEntry) -> Result<OutageResponse, String> {
+    let street_query = match &address.street_name_2 {
+        Some(n2) => format!("{} {}", n2.trim(), address.street_name_1.trim()),
+        None => address.street_name_1.clone(),
+    };
 
-    fetch_outages_for_addr(address).await
-}
+    log::debug!("Tauron: fetching for city='{}', street='{}'", address.city_name, street_query);
 
-fn settings_path_from_app() -> Result<PathBuf, String> {
-    let data_dir = dirs::data_dir()
-        .ok_or("Could not determine data directory")?
-        .join("xyz.eremef.awaria");
-    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
-    Ok(data_dir.join("settings.json"))
-}
+    // Look up Tauron GAIDs dynamically from address names
+    let cities = lookup_city(&address.city_name).await?;
+    let city = cities
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("City '{}' not found in Tauron", address.city_name))?;
 
-async fn fetch_outages_for_addr(address: &AddressEntry) -> Result<api_logic::OutageResponse, String> {
+    log::debug!("Tauron: found city '{}' GAID={}", city.Name, city.GAID);
+
+    let streets = lookup_street(&street_query, city.GAID).await?;
+
+    if streets.is_empty() {
+        return Err(format!("Street '{}' not found in Tauron (no results)", street_query));
+    }
+
+    for s in &streets {
+        log::debug!("Tauron: street candidate: '{}' (GAID={})", s.Name, s.GAID);
+    }
+
+    let street = streets.into_iter().next().unwrap();
+
+    log::debug!("Tauron: found street '{}' GAID={} (queried as '{}')", street.Name, street.GAID, street_query);
+
     let now = Utc::now();
     let from_date = now.to_rfc3339_opts(SecondsFormat::Millis, true);
     let cache_bust = now.timestamp_millis().to_string();
-    
-    let query = get_outages_query(
-        address.city_gaid,
-        address.street_gaid,
-        &address.house_no,
-        &from_date,
-        &cache_bust
+
+    let url = format!(
+        "{}/outages/address?cityGAID={}&streetGAID={}&houseNo={}&fromDate={}&getLightingSupport=false&getServicedSwitchingoff=true&_={}",
+        BASE_URL, city.GAID, street.GAID, address.house_no.replace(' ', "%20"), from_date.replace(' ', "%20"), cache_bust
     );
 
     let client = build_client()?;
-    let res = client.get(&format!("{}/outages/address", BASE_URL))
-        .query(&query)
+    let res = client.get(&url)
         .header("accept", "application/json")
         .header("x-requested-with", "XMLHttpRequest")
         .header("Referer", "https://www.tauron-dystrybucja.pl/wylaczenia")
@@ -206,20 +242,15 @@ async fn fetch_outages_for_addr(address: &AddressEntry) -> Result<api_logic::Out
         return Err(format!("HTTP error! status: {}", res.status()));
     }
 
-    let mut data = res.json::<api_logic::OutageResponse>()
+    let mut data = res.json::<OutageResponse>()
         .await
         .map_err(|e| e.to_string())?;
 
-    let query_str = query.iter()
-        .map(|(k, v)| format!("{}={}", k, v))
-        .collect::<Vec<_>>()
-        .join("&");
-    data.debug_query = Some(format!("{}/outages/address?{}", BASE_URL, query_str));
+    data.debug_query = Some(url.clone());
 
     Ok(data)
 }
 
-#[command]
 async fn fetch_water_alerts() -> Result<Vec<UnifiedAlert>, String> {
     let client = build_client()?;
     let res = client
@@ -249,7 +280,6 @@ async fn fetch_water_alerts() -> Result<Vec<UnifiedAlert>, String> {
     Ok(alerts)
 }
 
-#[command]
 async fn fetch_fortum_alerts() -> Result<Vec<UnifiedAlert>, String> {
     let client = build_client()?;
     
@@ -294,39 +324,55 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
     let mut all_alerts: Vec<UnifiedAlert> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
 
-    // Fetch Tauron alerts for each address
-    if let Some(ref s) = settings {
-        for (idx, addr) in s.addresses.iter().enumerate() {
-            match fetch_outages_for_addr(addr).await {
-                Ok(response) => {
-                    let alerts: Vec<UnifiedAlert> = response
-                        .OutageItems
-                        .unwrap_or_default()
-                        .iter()
-                        .map(|item| {
-                            let mut alert = item.to_unified();
-                            alert.address_index = Some(idx);
-                            alert.is_local = Some(item.matches_street(&addr.street_name));
-                            alert
-                        })
-                        .collect();
-                    all_alerts.extend(alerts);
+    let enabled_sources = settings
+        .as_ref()
+        .and_then(|s| s.enabled_sources.clone())
+        .unwrap_or_else(|| vec!["tauron".to_string(), "water".to_string(), "fortum".to_string()]);
+
+    log::info!("fetch_all_alerts: enabled_sources={:?}, addresses={}", enabled_sources, settings.as_ref().map(|s| s.addresses.len()).unwrap_or(0));
+
+    // Fetch Tauron alerts for each address (only if provider enabled)
+    if enabled_sources.contains(&"tauron".to_string()) {
+        if let Some(ref s) = settings {
+            for (idx, addr) in s.addresses.iter().enumerate() {
+                match fetch_tauron_outages(addr).await {
+                    Ok(response) => {
+                        let alerts: Vec<UnifiedAlert> = response
+                            .OutageItems
+                            .unwrap_or_default()
+                            .iter()
+                            .map(|item| {
+                                let mut alert = item.to_unified();
+                                alert.address_index = Some(idx);
+                                alert.is_local = Some(item.matches_street(&addr.street_name_1, &addr.street_name_2));
+                                alert
+                            })
+                            .collect();
+                        all_alerts.extend(alerts);
+                    }
+                    Err(e) => {
+                        log::error!("Tauron[{}]: {}", idx, e);
+                        errors.push(format!("Tauron[{}]: {}", idx, e));
+                    }
                 }
-                Err(e) => errors.push(format!("Tauron[{}]: {}", idx, e)),
             }
         }
     }
 
-    // Fetch MPWiK water alerts (no settings needed)
-    match fetch_water_alerts().await {
-        Ok(water_alerts) => all_alerts.extend(water_alerts),
-        Err(e) => errors.push(format!("MPWiK: {}", e)),
+    // Fetch MPWiK water alerts (only if provider enabled)
+    if enabled_sources.contains(&"water".to_string()) {
+        match fetch_water_alerts().await {
+            Ok(water_alerts) => all_alerts.extend(water_alerts),
+            Err(e) => errors.push(format!("MPWiK: {}", e)),
+        }
     }
 
-    // Fetch Fortum alerts (Wrocław only, no settings needed)
-    match fetch_fortum_alerts().await {
-        Ok(fortum_alerts) => all_alerts.extend(fortum_alerts),
-        Err(e) => errors.push(format!("Fortum: {}", e)),
+    // Fetch Fortum alerts (only if provider enabled)
+    if enabled_sources.contains(&"fortum".to_string()) {
+        match fetch_fortum_alerts().await {
+            Ok(fortum_alerts) => all_alerts.extend(fortum_alerts),
+            Err(e) => errors.push(format!("Fortum: {}", e)),
+        }
     }
 
     if all_alerts.is_empty() && !errors.is_empty() {
@@ -350,12 +396,9 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
-        fetch_outages_for_address,
         fetch_all_alerts,
-        fetch_water_alerts,
-        fetch_fortum_alerts,
-        lookup_city,
-        lookup_street,
+        teryt_lookup_city,
+        teryt_lookup_street,
         save_settings,
         load_settings,
         add_address,

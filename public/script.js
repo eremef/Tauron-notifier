@@ -15,6 +15,15 @@ let lastAlerts = [];
 let lastFetchDate = null;
 let selectedAddressIndex = -1; // -1 means "all addresses"
 
+let selectedCityId = null;
+let selectedCityName = '';
+let selectedStreetId = null;
+let selectedStreetName = '';
+let selectedStreetName1 = '';
+let selectedStreetName2 = null;
+let cityDebounceTimer = null;
+let streetDebounceTimer = null;
+
 function initSettings() {
     const btn = document.getElementById('settings-btn');
     const panel = document.getElementById('settings-panel');
@@ -34,8 +43,17 @@ function initSettings() {
         document.getElementById('address-name-input').value = '';
         document.getElementById('city-input').value = '';
         document.getElementById('street-input').value = '';
+        document.getElementById('street-input').disabled = true;
         document.getElementById('house-input').value = '';
         document.getElementById('settings-status').textContent = '';
+        selectedCityId = null;
+        selectedCityName = '';
+        selectedStreetId = null;
+        selectedStreetName = '';
+        selectedStreetName1 = '';
+        selectedStreetName2 = null;
+        hideSuggestions('city-suggestions');
+        hideSuggestions('street-suggestions');
     });
 
     document.getElementById('cancel-address-btn').addEventListener('click', function() {
@@ -45,8 +63,79 @@ function initSettings() {
         document.getElementById('address-name-input').value = '';
         document.getElementById('city-input').value = '';
         document.getElementById('street-input').value = '';
+        document.getElementById('street-input').disabled = true;
         document.getElementById('house-input').value = '';
         document.getElementById('settings-status').textContent = '';
+        selectedCityId = null;
+        selectedCityName = '';
+        selectedStreetId = null;
+        selectedStreetName = '';
+        selectedStreetName1 = '';
+        selectedStreetName2 = null;
+        hideSuggestions('city-suggestions');
+        hideSuggestions('street-suggestions');
+    });
+
+    const cityInput = document.getElementById('city-input');
+    cityInput.addEventListener('input', () => {
+        selectedCityId = null;
+        selectedCityName = '';
+        selectedStreetId = null;
+        selectedStreetName = '';
+        selectedStreetName1 = '';
+        selectedStreetName2 = null;
+        document.getElementById('street-input').value = '';
+        document.getElementById('street-input').disabled = true;
+        hideSuggestions('street-suggestions');
+
+        clearTimeout(cityDebounceTimer);
+        const query = cityInput.value.trim();
+        if (query.length < 2) {
+            hideSuggestions('city-suggestions');
+            return;
+        }
+        cityDebounceTimer = setTimeout(() => searchCities(query), 300);
+    });
+
+    cityInput.addEventListener('focus', () => {
+        if (!selectedCityId && cityInput.value.trim().length >= 2) {
+            searchCities(cityInput.value.trim());
+        }
+    });
+
+    const streetInput = document.getElementById('street-input');
+    streetInput.addEventListener('input', () => {
+        selectedStreetId = null;
+        selectedStreetName = '';
+        selectedStreetName1 = '';
+        selectedStreetName2 = null;
+
+        clearTimeout(streetDebounceTimer);
+        const query = streetInput.value.trim();
+        console.log('Street input:', query, 'cityId:', selectedCityId, 'length:', query.length);
+        if (query.length < 2 || !selectedCityId) {
+            if (query.length >= 2 && !selectedCityId) {
+                console.warn('Street typed but no city selected');
+            }
+            hideSuggestions('street-suggestions');
+            return;
+        }
+        streetDebounceTimer = setTimeout(() => searchStreets(query), 300);
+    });
+
+    streetInput.addEventListener('focus', () => {
+        if (!selectedStreetId && streetInput.value.trim().length >= 2 && selectedCityId) {
+            searchStreets(streetInput.value.trim());
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#city-input') && !e.target.closest('#city-suggestions')) {
+            hideSuggestions('city-suggestions');
+        }
+        if (!e.target.closest('#street-input') && !e.target.closest('#street-suggestions')) {
+            hideSuggestions('street-suggestions');
+        }
     });
 
     themeSelect.addEventListener('change', async (e) => {
@@ -109,9 +198,7 @@ function initSettings() {
             if (document.getElementById('source-fortum-check').checked) enabledSources.push('fortum');
             currentSettings.enabledSources = enabledSources;
             autoSaveSettings().then(() => {
-                const container = document.getElementById('outages-container');
-                renderAlerts(lastAlerts || [], container, currentSettings, selectedAddressIndex);
-                updateLastUpdated();
+                fetchOutages();
             });
         });
     });
@@ -129,6 +216,7 @@ function initAddressFilter() {
 function updateAddressFilter() {
     const filter = document.getElementById('address-filter');
     const allOpt = filter.querySelector('option[value="-1"]');
+    const wasHidden = filter.classList.contains('hidden');
     filter.innerHTML = '';
     filter.appendChild(allOpt);
     
@@ -139,10 +227,12 @@ function updateAddressFilter() {
     } else if (addressCount === 1) {
         filter.classList.add('hidden');
         selectedAddressIndex = 0;
-        const container = document.getElementById('outages-container');
-        renderAlerts(lastAlerts || [], container, currentSettings, selectedAddressIndex);
     } else {
         filter.classList.remove('hidden');
+        if (wasHidden) {
+            selectedAddressIndex = -1;
+            filter.value = '-1';
+        }
         currentSettings.addresses.forEach((addr, idx) => {
             const opt = document.createElement('option');
             opt.value = idx;
@@ -206,6 +296,115 @@ async function autoSaveSettings() {
     } catch (error) {
         console.error('Failed to auto-save settings:', error);
     }
+}
+
+// ── TERYT Search ──────────────────────────────────────────
+
+async function searchCities(query) {
+    try {
+        console.log('Searching cities:', query);
+        const results = await window.__TAURI__.core.invoke('teryt_lookup_city', { cityName: query });
+        console.log('City results:', results);
+        renderCitySuggestions(results);
+    } catch (error) {
+        console.error('City search error:', error);
+        const container = document.getElementById('city-suggestions');
+        container.innerHTML = `<div class="suggestion-item no-results">Error: ${escapeHtml(String(error))}</div>`;
+        container.classList.remove('hidden');
+    }
+}
+
+function renderCitySuggestions(cities) {
+    const container = document.getElementById('city-suggestions');
+    if (!cities || cities.length === 0) {
+        container.innerHTML = '<div class="suggestion-item no-results">No cities found</div>';
+        container.classList.remove('hidden');
+        return;
+    }
+
+    container.innerHTML = cities.map(c => `
+        <div class="suggestion-item" data-city-id="${c.city_id}" data-city-name="${escapeHtml(c.city)}">
+            <div class="suggestion-name">${escapeHtml(c.city)}</div>
+            <div class="suggestion-detail">${escapeHtml(c.voivodeship)} / ${escapeHtml(c.district)} / ${escapeHtml(c.commune)}</div>
+        </div>
+    `).join('');
+
+    container.querySelectorAll('.suggestion-item[data-city-id]').forEach(el => {
+        el.addEventListener('click', () => {
+            selectedCityId = parseInt(el.dataset.cityId, 10);
+            selectedCityName = el.dataset.cityName;
+            console.log('City selected:', selectedCityName, 'ID:', selectedCityId);
+            document.getElementById('city-input').value = selectedCityName;
+            hideSuggestions('city-suggestions');
+
+            selectedStreetId = null;
+            selectedStreetName = '';
+            document.getElementById('street-input').value = '';
+            document.getElementById('street-input').disabled = false;
+            document.getElementById('street-input').focus();
+        });
+    });
+
+    container.classList.remove('hidden');
+}
+
+async function searchStreets(query) {
+    if (!selectedCityId) {
+        console.warn('searchStreets: no city selected');
+        return;
+    }
+    try {
+        console.log('Searching streets for city_id:', selectedCityId, 'query:', query);
+        const results = await window.__TAURI__.core.invoke('teryt_lookup_street', {
+            cityId: selectedCityId,
+            streetName: query
+        });
+        console.log('Street results:', results);
+        renderStreetSuggestions(results);
+    } catch (error) {
+        console.error('Street search error:', error);
+        const container = document.getElementById('street-suggestions');
+        container.innerHTML = `<div class="suggestion-item no-results">Error: ${escapeHtml(String(error))}</div>`;
+        container.classList.remove('hidden');
+    }
+}
+
+function renderStreetSuggestions(streets) {
+    const container = document.getElementById('street-suggestions');
+    if (!streets || streets.length === 0) {
+        container.innerHTML = '<div class="suggestion-item no-results">No streets found</div>';
+        container.classList.remove('hidden');
+        return;
+    }
+
+    container.innerHTML = streets.map(s => `
+        <div class="suggestion-item" data-street-id="${s.street_id}" data-street-name="${escapeHtml(s.full_street_name)}" data-street-name1="${escapeHtml(s.street_name_1)}" data-street-name2="${s.street_name_2 ? escapeHtml(s.street_name_2) : ''}">
+            <div class="suggestion-name">${escapeHtml(s.full_street_name)}</div>
+        </div>
+    `).join('');
+
+    container.querySelectorAll('.suggestion-item[data-street-id]').forEach(el => {
+        el.addEventListener('click', () => {
+            selectedStreetId = parseInt(el.dataset.streetId, 10);
+            selectedStreetName = el.dataset.streetName;
+            selectedStreetName1 = el.dataset.streetName1;
+            selectedStreetName2 = el.dataset.streetName2 || null;
+            document.getElementById('street-input').value = selectedStreetName;
+            hideSuggestions('street-suggestions');
+        });
+    });
+
+    container.classList.remove('hidden');
+}
+
+function hideSuggestions(id) {
+    document.getElementById(id).classList.add('hidden');
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
 }
 
 async function loadSettingsAndFetch() {
@@ -272,13 +471,17 @@ async function loadSettingsAndFetch() {
 
 async function saveNewAddress() {
     const name = document.getElementById('address-name-input').value.trim() || 'Address ' + ((currentSettings?.addresses?.length || 0) + 1);
-    const cityName = document.getElementById('city-input').value.trim();
     const streetName = document.getElementById('street-input').value.trim();
     const houseNo = document.getElementById('house-input').value.trim();
     const status = document.getElementById('settings-status');
 
-    if (!cityName || !streetName || !houseNo) {
-        status.textContent = typeof t !== 'undefined' ? t('err_fields_required') : '⚠️ All fields are required.';
+    if (!selectedCityId || !selectedStreetId) {
+        status.textContent = typeof t !== 'undefined' ? t('err_fields_required') : '⚠️ Please select a city and street from the lists.';
+        status.className = 'settings-status error';
+        return;
+    }
+    if (!houseNo) {
+        status.textContent = typeof t !== 'undefined' ? t('err_fields_required') : '⚠️ House number is required.';
         status.className = 'settings-status error';
         return;
     }
@@ -287,43 +490,19 @@ async function saveNewAddress() {
     saveBtn.disabled = true;
 
     try {
-        status.textContent = typeof t !== 'undefined' ? t('msg_looking_city') : '🔍 Looking up city...';
+        const statusMsg = typeof t !== 'undefined' ? t('msg_saving') : '💾 Saving...';
+        status.textContent = statusMsg;
         status.className = 'settings-status';
-        const cities = await window.__TAURI__.core.invoke('lookup_city', { cityName });
-
-        const city = cities.find(c => c.Name === cityName);
-        if (!city) {
-            const available = cities.map(c => c.Name).join(', ');
-            status.textContent = (typeof t !== 'undefined' ? t('err_city_not_found') : `❌ City not found. Did you mean: `) + `${available || 'none'}`;
-            status.className = 'settings-status error';
-            saveBtn.disabled = false;
-            return;
-        }
-
-        status.textContent = typeof t !== 'undefined' ? t('msg_looking_street') : '🔍 Looking up street...';
-        const streets = await window.__TAURI__.core.invoke('lookup_street', {
-            streetName,
-            cityGaid: city.GAID
-        });
-
-        const street = streets.find(s => s.Name === streetName);
-        if (!street) {
-            const available = streets.map(s => s.Name).join(', ');
-            status.textContent = (typeof t !== 'undefined' ? t('err_street_not_found') : `❌ Street not found. Did you mean: `) + `${available || 'none'}`;
-            status.className = 'settings-status error';
-            saveBtn.disabled = false;
-            return;
-        }
-
-        status.textContent = typeof t !== 'undefined' ? t('msg_saving') : '💾 Saving...';
 
         const address = {
             name,
-            cityName,
-            streetName,
+            cityName: selectedCityName,
+            streetName: selectedStreetName,
+            streetName1: selectedStreetName1,
+            streetName2: selectedStreetName2,
             houseNo,
-            cityGAID: city.GAID,
-            streetGAID: street.GAID
+            cityId: selectedCityId,
+            streetId: selectedStreetId
         };
 
         currentSettings = await window.__TAURI__.core.invoke('add_address', { address });
@@ -460,24 +639,19 @@ function updateLastUpdated(date) {
 function filterAlerts(alerts, streetName) {
     if (!alerts || !streetName) return [];
 
+    const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wordMatch = (text, word) => {
+        const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'i');
+        return regex.test(text);
+    };
+
     const normalize = (name) => name.replace(/^(ul\.|al\.|pl\.|os\.|rondo)\s*/i, '').trim();
     const fullStreet = normalize(streetName);
-
-    if (!fullStreet) return [];
-
-    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const significantWords = fullStreet.split(/\s+/).filter(word => word.length >= 3);
+    const significantWords = fullStreet.split(/\s+/).filter(w => w.length >= 3);
 
     return alerts.filter(item => {
         if (!item.message) return false;
-        const message = item.message;
-
-        if (message.includes(streetName)) return true;
-
-        return significantWords.some(word => {
-            const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`);
-            return regex.test(message);
-        });
+        return significantWords.some(word => wordMatch(item.message, word));
     });
 }
 
@@ -485,47 +659,56 @@ function filterAlerts(alerts, streetName) {
 function filterOutages(allOutages, streetName, settings) {
     if (!allOutages) return [];
 
+    const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wordMatch = (text, word) => {
+        const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'i');
+        return regex.test(text);
+    };
+
     const normalize = (name) => name.replace(/^(ul\.|al\.|pl\.|os\.|rondo)\s*/i, '').trim();
     const fullStreet = normalize(streetName);
-
-    if (!fullStreet) return [];
-
-    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const significantWords = fullStreet.split(/\s+/).filter(word => word.length >= 3);
+    const significantWords = fullStreet.split(/\s+/).filter(w => w.length >= 3);
 
     return allOutages.filter(item => {
-        if (settings && settings.streetGAID && item.GAID === settings.streetGAID) {
-            return true;
-        }
-
         if (!item.Message && !item.message) return false;
         if (!streetName) return false;
 
         const message = item.Message || item.message || '';
-
-        if (message.includes(streetName)) return true;
-
-        return significantWords.some(word => {
-            const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`);
-            return regex.test(message);
-        });
+        return significantWords.some(word => wordMatch(message, word));
     });
 }
 
-function matchesStreetName(alert, streetName) {
-    if (!alert.message || !streetName) return false;
+function matchesStreetName(alert, addr) {
+    if (!alert.message || !addr) return false;
     
-    if (alert.message.includes(streetName)) return true;
+    const message = alert.message;
+    const streetName1 = addr.streetName1 || '';
+    const streetName2 = addr.streetName2 || null;
     
-    const normalize = (name) => name.replace(/^(ul\.|al\.|pl\.|os\.|rondo)\s*/i, '').trim();
-    const fullStreet = normalize(streetName);
-    const significantWords = fullStreet.split(/\s+/).filter(w => w.length >= 3);
+    if (!streetName1) return false;
+
     const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
-    return significantWords.some(word => {
-        const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`);
-        return regex.test(alert.message);
-    });
+    const wordMatch = (word) => {
+        const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'i');
+        return regex.test(message);
+    };
+
+    // Priority: compound name first (if nazwa_2 exists)
+    if (streetName2) {
+        const compound = `${streetName2.trim()} ${streetName1.trim()}`;
+        if (wordMatch(compound)) return true;
+    }
+
+    // Fallback: individual significant words (>= 3 chars)
+    const words1 = streetName1.split(/\s+/).filter(w => w.length >= 3);
+    if (words1.some(wordMatch)) return true;
+
+    if (streetName2) {
+        const words2 = streetName2.split(/\s+/).filter(w => w.length >= 3);
+        if (words2.some(wordMatch)) return true;
+    }
+
+    return false;
 }
 
 function matchesAddress(alert, addresses, addrIdx) {
@@ -539,7 +722,7 @@ function matchesAddress(alert, addresses, addrIdx) {
     
     // For Water and Fortum, use street name matching
     if (!alert.message) return false;
-    return matchesStreetName(alert, addr.streetName);
+    return matchesStreetName(alert, addr);
 }
 
 function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
@@ -573,14 +756,14 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
                 // Skip alerts from other addresses - don't show them at all when filtered by specific address
             } else if (item.source === 'water') {
                 const addr = addresses[selectedAddrIdx];
-                if (addr && matchesStreetName(item, addr.streetName)) {
+                if (addr && matchesStreetName(item, addr)) {
                     localWater.push(item);
                 } else {
                     otherWater.push(item);
                 }
             } else if (item.source === 'fortum') {
                 const addr = addresses[selectedAddrIdx];
-                if (addr && matchesStreetName(item, addr.streetName)) {
+                if (addr && matchesStreetName(item, addr)) {
                     localFortum.push(item);
                 } else {
                     otherFortum.push(item);
