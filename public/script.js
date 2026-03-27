@@ -17,12 +17,17 @@ let selectedAddressIndex = -1; // -1 means "all addresses"
 
 let selectedCityId = null;
 let selectedCityName = '';
+let selectedVoivodeship = '';
+let selectedDistrict = '';
+let selectedCommune = '';
 let selectedStreetId = null;
 let selectedStreetName = '';
 let selectedStreetName1 = '';
 let selectedStreetName2 = null;
 let cityDebounceTimer = null;
 let streetDebounceTimer = null;
+let cityHasNoStreets = false;
+let editingAddressIndex = null;
 
 function initSettings() {
     const btn = document.getElementById('settings-btn');
@@ -48,10 +53,16 @@ function initSettings() {
         document.getElementById('settings-status').textContent = '';
         selectedCityId = null;
         selectedCityName = '';
+        selectedVoivodeship = '';
+        selectedDistrict = '';
+        selectedCommune = '';
         selectedStreetId = null;
         selectedStreetName = '';
         selectedStreetName1 = '';
         selectedStreetName2 = null;
+        cityHasNoStreets = false;
+        editingAddressIndex = null;
+        document.getElementById('street-input').classList.remove('grayed-out');
         hideSuggestions('city-suggestions');
         hideSuggestions('street-suggestions');
     });
@@ -68,10 +79,15 @@ function initSettings() {
         document.getElementById('settings-status').textContent = '';
         selectedCityId = null;
         selectedCityName = '';
+        selectedVoivodeship = '';
+        selectedDistrict = '';
+        selectedCommune = '';
         selectedStreetId = null;
         selectedStreetName = '';
         selectedStreetName1 = '';
         selectedStreetName2 = null;
+        cityHasNoStreets = false;
+        document.getElementById('street-input').classList.remove('grayed-out');
         hideSuggestions('city-suggestions');
         hideSuggestions('street-suggestions');
     });
@@ -80,12 +96,16 @@ function initSettings() {
     cityInput.addEventListener('input', () => {
         selectedCityId = null;
         selectedCityName = '';
+        selectedVoivodeship = '';
+        selectedDistrict = '';
+        selectedCommune = '';
         selectedStreetId = null;
         selectedStreetName = '';
         selectedStreetName1 = '';
         selectedStreetName2 = null;
         document.getElementById('street-input').value = '';
         document.getElementById('street-input').disabled = true;
+        cityHasNoStreets = false;
         hideSuggestions('street-suggestions');
 
         clearTimeout(cityDebounceTimer);
@@ -148,7 +168,7 @@ function initSettings() {
                 primaryAddressIndex: null,
                 theme: newTheme,
                 language: 'system',
-                enabledSources: ['tauron', 'water', 'fortum']
+                enabledSources: ['tauron', 'water', 'fortum', 'energa']
             };
         } else {
             currentSettings.theme = newTheme;
@@ -171,7 +191,7 @@ function initSettings() {
                 primaryAddressIndex: null,
                 theme: 'system',
                 language: newLang,
-                enabledSources: ['tauron', 'water', 'fortum']
+                enabledSources: ['tauron', 'water', 'fortum', 'energa']
             };
         } else {
             currentSettings.language = newLang;
@@ -188,14 +208,16 @@ function initSettings() {
         document.getElementById('location-settings-collapsible').classList.toggle('collapsed');
     });
 
-    ['source-tauron-check', 'source-water-check', 'source-fortum-check'].forEach(id => {
+    ['source-tauron-check', 'source-water-check', 'source-fortum-check', 'source-energa-check'].forEach(id => {
         const checkbox = document.getElementById(id);
+        if(!checkbox) return;
         checkbox.addEventListener('change', () => {
             if (!currentSettings) return;
             const enabledSources = [];
             if (document.getElementById('source-tauron-check').checked) enabledSources.push('tauron');
             if (document.getElementById('source-water-check').checked) enabledSources.push('water');
             if (document.getElementById('source-fortum-check').checked) enabledSources.push('fortum');
+            if (document.getElementById('source-energa-check') && document.getElementById('source-energa-check').checked) enabledSources.push('energa');
             currentSettings.enabledSources = enabledSources;
             autoSaveSettings().then(() => {
                 fetchOutages();
@@ -260,6 +282,7 @@ function renderAddressesList() {
             </div>
             <div class="address-actions">
                 ${idx === currentSettings.primaryAddressIndex ? '<span class="primary-badge">⭐</span>' : `<button class="icon-btn" onclick="setPrimaryAddress(${idx})" title="Set as primary">⭐</button>`}
+                <button class="icon-btn edit-btn" onclick="editAddress(${idx})" title="Edit">✏️</button>
                 <button class="icon-btn delete-btn" onclick="removeAddress(${idx})" title="Remove">🗑️</button>
             </div>
         </div>
@@ -285,6 +308,49 @@ window.removeAddress = async function(idx) {
     } catch (error) {
         console.error('Error removing address:', error);
     }
+};
+
+window.editAddress = function(idx) {
+    const addr = currentSettings.addresses[idx];
+    if (!addr) return;
+
+    editingAddressIndex = idx;
+
+    // Show form, hide list/add btn
+    document.getElementById('address-form').classList.remove('hidden');
+    document.getElementById('add-address-btn').classList.add('hidden');
+    document.getElementById('addresses-list').classList.add('hidden');
+
+    // Populate fields
+    document.getElementById('address-name-input').value = addr.name || '';
+    document.getElementById('city-input').value = addr.cityName || '';
+    document.getElementById('street-input').value = addr.streetName || '';
+    document.getElementById('house-input').value = addr.houseNo || '';
+
+    // Set globals for validation and lookup
+    selectedCityId = addr.cityId;
+    selectedCityName = addr.cityName;
+    selectedVoivodeship = addr.voivodeship || '';
+    selectedDistrict = addr.district || '';
+    selectedCommune = addr.commune || '';
+    selectedStreetId = addr.streetId;
+    selectedStreetName = addr.streetName;
+    selectedStreetName1 = addr.streetName1 || '';
+    selectedStreetName2 = addr.streetName2 || null;
+    
+    // Check if city has streets
+    if (addr.streetId === 0) {
+        cityHasNoStreets = true;
+        document.getElementById('street-input').disabled = true;
+        document.getElementById('street-input').classList.add('grayed-out');
+    } else {
+        cityHasNoStreets = false;
+        document.getElementById('street-input').disabled = false;
+        document.getElementById('street-input').classList.remove('grayed-out');
+    }
+
+    // Scroll to form
+    document.getElementById('address-form').scrollIntoView({ behavior: 'smooth' });
 };
 
 async function autoSaveSettings() {
@@ -323,7 +389,12 @@ function renderCitySuggestions(cities) {
     }
 
     container.innerHTML = cities.map(c => `
-        <div class="suggestion-item" data-city-id="${c.city_id}" data-city-name="${escapeHtml(c.city)}">
+        <div class="suggestion-item" 
+            data-city-id="${c.city_id}" 
+            data-city-name="${escapeHtml(c.city)}"
+            data-voivodeship="${escapeHtml(c.voivodeship)}"
+            data-district="${escapeHtml(c.district)}"
+            data-commune="${escapeHtml(c.commune)}">
             <div class="suggestion-name">${escapeHtml(c.city)}</div>
             <div class="suggestion-detail">${escapeHtml(c.voivodeship)} / ${escapeHtml(c.district)} / ${escapeHtml(c.commune)}</div>
         </div>
@@ -333,15 +404,43 @@ function renderCitySuggestions(cities) {
         el.addEventListener('click', () => {
             selectedCityId = parseInt(el.dataset.cityId, 10);
             selectedCityName = el.dataset.cityName;
-            console.log('City selected:', selectedCityName, 'ID:', selectedCityId);
+            selectedVoivodeship = el.dataset.voivodeship;
+            selectedDistrict = el.dataset.district;
+            selectedCommune = el.dataset.commune;
+            console.log('City selected:', selectedCityName, 'ID:', selectedCityId, 'Units:', selectedVoivodeship, selectedDistrict, selectedCommune);
             document.getElementById('city-input').value = selectedCityName;
             hideSuggestions('city-suggestions');
 
             selectedStreetId = null;
             selectedStreetName = '';
-            document.getElementById('street-input').value = '';
-            document.getElementById('street-input').disabled = false;
-            document.getElementById('street-input').focus();
+            cityHasNoStreets = false;
+            
+            // Check if city has streets
+            window.__TAURI__.core.invoke('teryt_city_has_streets', { cityId: selectedCityId })
+                .then(hasStreets => {
+                    cityHasNoStreets = !hasStreets;
+                    const streetInput = document.getElementById('street-input');
+                    if (cityHasNoStreets) {
+                        streetInput.value = t('no_streets');
+                        streetInput.disabled = true;
+                        streetInput.classList.add('grayed-out');
+                        selectedStreetId = 0; // special ID for no streets
+                        selectedStreetName = '';
+                        selectedStreetName1 = '';
+                        selectedStreetName2 = null;
+                        document.getElementById('house-input').focus();
+                    } else {
+                        streetInput.value = '';
+                        streetInput.disabled = false;
+                        streetInput.classList.remove('grayed-out');
+                        streetInput.focus();
+                    }
+                })
+                .catch(err => {
+                    console.error('Error checking city streets:', err);
+                    document.getElementById('street-input').disabled = false;
+                    document.getElementById('street-input').focus();
+                });
         });
     });
 
@@ -426,10 +525,13 @@ async function loadSettingsAndFetch() {
             }
             applyTheme(settings.theme || 'system');
 
-            const sources = settings.enabledSources || ['tauron', 'water', 'fortum'];
+            const sources = settings.enabledSources || ['tauron', 'water', 'fortum', 'energa'];
             document.getElementById('source-tauron-check').checked = sources.includes('tauron');
             document.getElementById('source-water-check').checked = sources.includes('water');
             document.getElementById('source-fortum-check').checked = sources.includes('fortum');
+            if (document.getElementById('source-energa-check')) {
+                document.getElementById('source-energa-check').checked = sources.includes('energa');
+            }
 
             updateAddressFilter();
             renderAddressesList();
@@ -454,7 +556,7 @@ async function loadSettingsAndFetch() {
                 primaryAddressIndex: null,
                 theme: 'system',
                 language: 'system',
-                enabledSources: ['tauron', 'water', 'fortum']
+                enabledSources: ['tauron', 'water', 'fortum', 'energa']
             };
             updateAddressFilter();
             renderAddressesList();
@@ -475,7 +577,7 @@ async function saveNewAddress() {
     const houseNo = document.getElementById('house-input').value.trim();
     const status = document.getElementById('settings-status');
 
-    if (!selectedCityId || !selectedStreetId) {
+    if (!selectedCityId || (!selectedStreetId && !cityHasNoStreets)) {
         status.textContent = typeof t !== 'undefined' ? t('err_fields_required') : '⚠️ Please select a city and street from the lists.';
         status.className = 'settings-status error';
         return;
@@ -493,10 +595,12 @@ async function saveNewAddress() {
         const statusMsg = typeof t !== 'undefined' ? t('msg_saving') : '💾 Saving...';
         status.textContent = statusMsg;
         status.className = 'settings-status';
-
         const address = {
             name,
             cityName: selectedCityName,
+            voivodeship: selectedVoivodeship,
+            district: selectedDistrict,
+            commune: selectedCommune,
             streetName: selectedStreetName,
             streetName1: selectedStreetName1,
             streetName2: selectedStreetName2,
@@ -504,8 +608,15 @@ async function saveNewAddress() {
             cityId: selectedCityId,
             streetId: selectedStreetId
         };
-
-        currentSettings = await window.__TAURI__.core.invoke('add_address', { address });
+        
+        if (editingAddressIndex !== null) {
+            // Update existing address
+            currentSettings.addresses[editingAddressIndex] = address;
+            await window.__TAURI__.core.invoke('save_settings', { settings: currentSettings });
+        } else {
+            // Add new address
+            currentSettings = await window.__TAURI__.core.invoke('add_address', { address });
+        }
 
         status.textContent = typeof t !== 'undefined' ? t('msg_saved') : '✅ Saved!';
         status.className = 'settings-status success';
@@ -514,6 +625,7 @@ async function saveNewAddress() {
         document.getElementById('add-address-btn').classList.remove('hidden');
         document.getElementById('addresses-list').classList.remove('hidden');
         
+        editingAddressIndex = null;
         updateAddressFilter();
         renderAddressesList();
 
@@ -684,10 +796,16 @@ function matchesStreetName(alert, addr) {
     const message = alert.message;
     const streetName1 = addr.streetName1 || '';
     const streetName2 = addr.streetName2 || null;
-    
-    if (!streetName1) return false;
 
     const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    if (!streetName1) {
+        // Fallback for cities without streets: match by city name in the message
+        const cityName = addr.cityName || '';
+        if (!cityName) return false;
+        const regex = new RegExp(`\\b${escapeRegExp(cityName)}\\b`, 'i');
+        return regex.test(message);
+    }
     const wordMatch = (word) => {
         const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'i');
         return regex.test(message);
@@ -728,7 +846,7 @@ function matchesAddress(alert, addresses, addrIdx) {
 function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
     const now = new Date();
 
-    const enabledSources = (settings && settings.enabledSources) ? settings.enabledSources : ['tauron', 'water', 'fortum'];
+    const enabledSources = (settings && settings.enabledSources) ? settings.enabledSources : ['tauron', 'water', 'fortum', 'energa'];
     const activeAlerts = alerts.filter(item => {
         if (!enabledSources.includes(item.source)) return false;
         if (!item.endDate) return true;
@@ -741,6 +859,7 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
     let localTauron = [], otherTauron = [];
     let localWater = [], otherWater = [];
     let localFortum = [], otherFortum = [];
+    let localEnerga = [], otherEnerga = [];
 
     if (selectedAddrIdx >= 0 && addresses[selectedAddrIdx]) {
         activeAlerts.forEach(item => {
@@ -768,6 +887,13 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
                 } else {
                     otherFortum.push(item);
                 }
+            } else if (item.source === 'energa') {
+                const addr = addresses[selectedAddrIdx];
+                if (addr && matchesStreetName(item, addr)) {
+                    localEnerga.push(item);
+                } else {
+                    otherEnerga.push(item);
+                }
             }
         });
     } else if (addresses.length > 0) {
@@ -793,16 +919,24 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
                 } else {
                     otherFortum.push(item);
                 }
+            } else if (item.source === 'energa') {
+                const isLocal = addresses.some((_, idx) => matchesAddress(item, addresses, idx));
+                if (isLocal) {
+                    localEnerga.push(item);
+                } else {
+                    otherEnerga.push(item);
+                }
             }
         });
     } else {
         otherTauron = activeAlerts.filter(a => a.source === 'tauron');
         otherWater = activeAlerts.filter(a => a.source === 'water');
         otherFortum = activeAlerts.filter(a => a.source === 'fortum');
+        otherEnerga = activeAlerts.filter(a => a.source === 'energa');
     }
 
-    const hasLocalAlerts = localTauron.length > 0 || localWater.length > 0 || localFortum.length > 0;
-    const hasOtherAlerts = otherTauron.length > 0 || otherWater.length > 0 || otherFortum.length > 0;
+    const hasLocalAlerts = localTauron.length > 0 || localWater.length > 0 || localFortum.length > 0 || localEnerga.length > 0;
+    const hasOtherAlerts = otherTauron.length > 0 || otherWater.length > 0 || otherFortum.length > 0 || otherEnerga.length > 0;
     const hasAnyAlerts = hasLocalAlerts || hasOtherAlerts;
 
     container.innerHTML = '';
@@ -815,7 +949,7 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
     }
 
     if (hasLocalAlerts) {
-        const totalLocal = localTauron.length + localWater.length + localFortum.length;
+        const totalLocal = localTauron.length + localWater.length + localFortum.length + localEnerga.length;
         const lblYourLoc = typeof t !== 'undefined' ? t('lbl_your_location') : 'Your location';
         container.innerHTML += `<div class="section-label">${lblYourLoc} (${totalLocal})</div>`;
         
@@ -827,6 +961,9 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
         }
         if (localFortum.length > 0) {
             container.innerHTML += renderCards(localFortum, 'fortum');
+        }
+        if (localEnerga.length > 0) {
+            container.innerHTML += renderCards(localEnerga, 'energa');
         }
     }
 
@@ -878,15 +1015,31 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
                 </div>
             `;
         }
+        if (otherEnerga.length > 0) {
+            const lblSection = (typeof t !== 'undefined' ? t('lbl_section_energa') : null) || 'Power (Energa)';
+            container.innerHTML += `
+                <div class="collapsible source-energa collapsed">
+                    <div class="section-label other" onclick="this.parentElement.classList.toggle('collapsed')">
+                        <span>${lblSection} (${otherEnerga.length})</span>
+                        <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="collapsible-content">
+                        ${renderCards(otherEnerga, 'energa')}
+                    </div>
+                </div>
+            `;
+        }
     }
 }
 
 function renderCards(alerts, source) {
     const sourceLabel = source === 'water'
-        ? (typeof t !== 'undefined' ? t('source_water') : '💧 Water Outage')
+        ? ((typeof t !== 'undefined' ? t('source_water') : null) || '💧 Water Outage')
         : source === 'fortum'
-        ? (typeof t !== 'undefined' ? t('source_fortum') : '⚡ Fortum Outage')
-        : (typeof t !== 'undefined' ? t('source_tauron') : '⚡ Power Outage');
+        ? ((typeof t !== 'undefined' ? t('source_fortum') : null) || '⚡ Fortum Outage')
+        : source === 'energa'
+        ? ((typeof t !== 'undefined' ? t('source_energa') : null) || '⚡ Energa Outage')
+        : ((typeof t !== 'undefined' ? t('source_tauron') : null) || '⚡ Power Outage');
 
     return alerts.map(item => `
         <div class="card source-${source}">

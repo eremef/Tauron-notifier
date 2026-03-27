@@ -7,6 +7,9 @@ pub const BASE_URL: &str = "https://www.tauron-dystrybucja.pl/waapi";
 pub struct GeoItem {
     pub GAID: u64,
     pub Name: String,
+    pub ProvinceName: Option<String>,
+    pub DistrictName: Option<String>,
+    pub CommuneName: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

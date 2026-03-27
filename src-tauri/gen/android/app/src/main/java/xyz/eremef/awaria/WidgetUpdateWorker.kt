@@ -30,6 +30,14 @@ class WidgetUpdateWorker(
             mpwikProvider.updateWidget(context, appWidgetManager, id)
         }
 
+        // Update Energa widgets
+        val energaName = ComponentName(context, EnergaWidgetProvider::class.java)
+        val energaIds = appWidgetManager.getAppWidgetIds(energaName)
+        val energaProvider = EnergaWidgetProvider()
+        for (id in energaIds) {
+            energaProvider.updateWidget(context, appWidgetManager, id)
+        }
+
         return Result.success()
     }
 }

@@ -49,10 +49,8 @@ fn db_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     let dev_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("assets")
         .join("teryt");
-    if dev_path.exists() {
-        if std::fs::copy(&dev_path, &db).is_ok() {
-            return Ok(db);
-        }
+    if dev_path.exists() && std::fs::copy(&dev_path, &db).is_ok() {
+        return Ok(db);
     }
 
     Err(format!(
@@ -77,7 +75,7 @@ pub fn lookup_cities(app: &AppHandle, city_name: &str) -> Result<Vec<TerytCity>,
                    AND city.rodz_gmi = commune.rodz \
                WHERE city.sym = city.sympod \
                    AND city.nazwa = ?1 COLLATE NOCASE \
-               ORDER BY city.nazwa \
+               ORDER BY voivodeship.nazwa, district.nazwa, commune.nazwa \
                LIMIT 20";
 
     let mut stmt = conn
@@ -113,13 +111,11 @@ pub fn lookup_streets(
 
     let sql = "SELECT street.cecha || IFNULL(' ' || street.nazwa_2, '') || ' ' || street.nazwa_1 AS full_name,
                        street.sym, street.sym_ul, street.nazwa_1, street.nazwa_2 \
-               FROM simc city \
-               LEFT JOIN simc city_part ON city.sym = city_part.sympod \
-               LEFT JOIN ulic street ON city.sym = street.sym \
-                   OR city_part.sym = street.sym \
-               WHERE city.sym = city.sympod \
-                   AND street.sym_ul IS NOT NULL \
-                   AND city.sym = ?1 \
+               FROM ulic street \
+               LEFT JOIN simc city ON street.sym = city.sym \
+               LEFT JOIN simc city_part ON city_part.sym = street.sym \
+               WHERE (city.sym = ?1 \
+                    OR city_part.sympod = ?1) \
                    AND full_name LIKE ?2 COLLATE NOCASE \
                ORDER BY full_name \
                LIMIT 30";
@@ -146,4 +142,23 @@ pub fn lookup_streets(
         results.push(row.map_err(|e| format!("Street row error: {}", e))?);
     }
     Ok(results)
+}
+
+pub fn city_has_streets(app: &AppHandle, city_id: u64) -> Result<bool, String> {
+    let path = db_path(app)?;
+    let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| format!("Failed to open teryt DB: {}", e))?;
+
+    let sql = "SELECT count(1)
+               FROM ulic street
+               LEFT JOIN simc city ON street.sym = city.sym
+               LEFT JOIN simc city_part ON city_part.sym = street.sym 
+               WHERE city.sym = ?1
+                   OR city_part.sympod = ?1";
+
+    let count: i64 = conn
+        .query_row(sql, [city_id as i64], |row| row.get(0))
+        .map_err(|e| format!("Street count query failed: {}", e))?;
+
+    Ok(count > 0)
 }

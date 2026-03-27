@@ -29,10 +29,15 @@ import org.json.JSONObject
 
 data class WidgetSettings(
         val cityName: String,
+        val voivodeship: String,
+        val district: String,
+        val commune: String,
         val streetName: String,
         val streetName1: String,
         val streetName2: String?,
         val houseNo: String,
+        val cityId: Long,
+        val streetId: Long,
         val theme: String,
         val language: String
 )
@@ -138,16 +143,24 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         return try {
             val json = JSONObject(settingsFile.readText())
             val addresses = json.optJSONArray("addresses")
-            
+
             if (addresses != null && addresses.length() > 0) {
                 (0 until addresses.length()).map { i ->
                     val addr = addresses.getJSONObject(i)
                     WidgetSettings(
                             cityName = addr.optString("cityName", ""),
+                            voivodeship = addr.optString("voivodeship", ""),
+                            district = addr.optString("district", ""),
+                            commune = addr.optString("commune", ""),
                             streetName = addr.optString("streetName", ""),
                             streetName1 = addr.optString("streetName1", ""),
-                            streetName2 = addr.optString("streetName2", "").let { if (it.isEmpty()) null else it },
-                            houseNo = addr.getString("houseNo"),
+                            streetName2 =
+                                    addr.optString("streetName2", "").let {
+                                        if (it.isEmpty()) null else it
+                                    },
+                            houseNo = addr.optString("houseNo", ""),
+                            cityId = addr.optLong("cityId", 0),
+                            streetId = addr.optLong("streetId", 0),
                             theme = json.optString("theme", "system"),
                             language = json.optString("language", "system")
                     )
@@ -354,15 +367,23 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         for (settings in settingsList) {
             try {
                 // Look up city GAID
-                val cityGAID = lookupTauronCity(settings.cityName) ?: continue
+                val cityGAID = lookupTauronCity(settings) ?: continue
 
-                // Look up street GAID — use compound name if streetName2 exists
-                val streetQuery = if (settings.streetName2 != null) {
-                    "${settings.streetName2} ${settings.streetName1}"
-                } else {
-                    settings.streetName1
-                }
-                val streetGAID = lookupTauronStreet(streetQuery, cityGAID) ?: continue
+                // Check for city without streets (TERYT streetId == 0)
+                val streetGAID =
+                        if (settings.streetId == 0L) {
+                            lookupTauronStreetDummy(cityGAID)
+                        } else {
+                            // Look up street GAID — use compound name if streetName2 exists
+                            val streetQuery =
+                                    if (settings.streetName2 != null) {
+                                        "${settings.streetName2} ${settings.streetName1}"
+                                    } else {
+                                        settings.streetName1
+                                    }
+                            lookupTauronStreet(streetQuery, cityGAID)
+                        }
+                                ?: continue
 
                 // Fetch outages
                 val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
@@ -393,7 +414,7 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
                 val response = conn.inputStream.bufferedReader().readText()
                 conn.disconnect()
 
-                totalCount += parseOutageItems(response, settings.streetName1, settings.streetName2)
+                totalCount += parseOutageItems(response, settings)
             } catch (e: Exception) {
                 continue
             }
@@ -401,10 +422,13 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         return totalCount
     }
 
-    private fun lookupTauronCity(cityName: String): Long? {
+    private fun lookupTauronCity(settings: WidgetSettings): Long? {
         return try {
-            val encoded = cityName.replace(" ", "%20")
-            val url = URL("https://www.tauron-dystrybucja.pl/waapi/enum/geo/cities?partName=$encoded&_=${System.currentTimeMillis()}")
+            val encoded = settings.cityName.replace(" ", "%20")
+            val url =
+                    URL(
+                            "https://www.tauron-dystrybucja.pl/waapi/enum/geo/cities?partName=$encoded&_=${System.currentTimeMillis()}"
+                    )
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.setRequestProperty("accept", "application/json")
@@ -422,10 +446,43 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
             val response = conn.inputStream.bufferedReader().readText()
             conn.disconnect()
 
-            val json = JSONObject("{\"items\":$response}")
-            val items = json.optJSONArray("items") ?: return null
-            if (items.length() == 0) return null
-            items.getJSONObject(0).getLong("GAID")
+            val items = org.json.JSONArray(response)
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                val prov = item.optString("ProvinceName", "")
+                val dist = item.optString("DistrictName", "")
+                val comm = item.optString("CommuneName", "")
+
+                if (prov.equals(settings.voivodeship, ignoreCase = true) &&
+                                dist.equals(settings.district, ignoreCase = true) &&
+                                comm.equals(settings.commune, ignoreCase = true)
+                ) {
+                    return item.getLong("GAID")
+                }
+            }
+            if (items.length() > 0) items.getJSONObject(0).getLong("GAID") else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun lookupTauronStreetDummy(cityGAID: Long): Long? {
+        return try {
+            val url =
+                    URL(
+                            "https://www.tauron-dystrybucja.pl/waapi/enum/geo/onlyonestreet?ownerGAID=$cityGAID&_=${System.currentTimeMillis()}"
+                    )
+            val conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            if (conn.responseCode !in 200..299) {
+                conn.disconnect()
+                return null
+            }
+            val response = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+            val items = org.json.JSONArray(response)
+            if (items.length() > 0) items.getJSONObject(0).getLong("GAID") else null
         } catch (e: Exception) {
             null
         }
@@ -434,7 +491,10 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
     private fun lookupTauronStreet(streetName: String, cityGAID: Long): Long? {
         return try {
             val encoded = streetName.replace(" ", "%20")
-            val url = URL("https://www.tauron-dystrybucja.pl/waapi/enum/geo/streets?partName=$encoded&ownerGAID=$cityGAID&_=${System.currentTimeMillis()}")
+            val url =
+                    URL(
+                            "https://www.tauron-dystrybucja.pl/waapi/enum/geo/streets?partName=$encoded&ownerGAID=$cityGAID&_=${System.currentTimeMillis()}"
+                    )
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.setRequestProperty("accept", "application/json")
@@ -489,7 +549,7 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         // Check against all addresses' street names
         var totalCount = 0
         for (settings in settingsList) {
-            totalCount += parseMpwikItems(response, settings.streetName1, settings.streetName2)
+            totalCount += parseMpwikItems(response, settings)
         }
         return totalCount
     }
@@ -513,8 +573,8 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         // Check against all addresses' street names
         var totalCount = 0
         for (settings in settingsList) {
-            totalCount += parseFortumItems(plannedResponse, settings.streetName1, settings.streetName2)
-            totalCount += parseFortumItems(currentResponse, settings.streetName1, settings.streetName2)
+            totalCount += parseFortumItems(plannedResponse, settings)
+            totalCount += parseFortumItems(currentResponse, settings)
         }
         return totalCount
     }
@@ -537,7 +597,7 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         return response
     }
 
-    internal fun parseFortumItems(jsonString: String, streetName1: String, streetName2: String?): Int {
+    internal fun parseFortumItems(jsonString: String, settings: WidgetSettings): Int {
         val json = JSONObject(jsonString)
         val items = json.optJSONArray("points") ?: return 0
         var count = 0
@@ -560,12 +620,19 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
             }
 
             val message = item.optString("message", "")
-            if (matchesStreet(message, streetName1, streetName2)) count++
+            if (matchesStreet(
+                            message,
+                            settings.cityName,
+                            settings.streetName1,
+                            settings.streetName2
+                    )
+            )
+                    count++
         }
         return count
     }
 
-    internal fun parseMpwikItems(jsonString: String, streetName1: String, streetName2: String?): Int {
+    internal fun parseMpwikItems(jsonString: String, settings: WidgetSettings): Int {
         val json = JSONObject(jsonString)
         val items = json.optJSONArray("failures") ?: return 0
         var count = 0
@@ -581,12 +648,19 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
                 } catch (e: Exception) {}
             }
             val content = item.optString("content", "")
-            if (matchesStreet(content, streetName1, streetName2)) count++
+            if (matchesStreet(
+                            content,
+                            settings.cityName,
+                            settings.streetName1,
+                            settings.streetName2
+                    )
+            )
+                    count++
         }
         return count
     }
 
-    internal fun parseOutageItems(jsonString: String, streetName1: String, streetName2: String?): Int {
+    internal fun parseOutageItems(jsonString: String, settings: WidgetSettings): Int {
         val json = JSONObject(jsonString)
         val items = json.optJSONArray("OutageItems") ?: return 0
         var count = 0
@@ -613,13 +687,98 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
                 if (parsedDate != null && parsedDate.before(now)) continue
             }
             val message = item.optString("Message", "")
-            if (matchesStreet(message, streetName1, streetName2)) count++
+            if (matchesStreet(
+                            message,
+                            settings.cityName,
+                            settings.streetName1,
+                            settings.streetName2
+                    )
+            )
+                    count++
         }
         return count
     }
 
-    private fun matchesStreet(text: String, streetName1: String, streetName2: String?): Boolean {
-        if (text.isEmpty() || streetName1.isEmpty()) return false
+    protected fun fetchEnergaAlertCount(settingsList: List<WidgetSettings>): Int {
+        var totalCount = 0
+        try {
+            val apiUrl = fetchEnergaApiUrl() ?: return 0
+            val response = fetchJson(URL(apiUrl))
+            val json = JSONObject(response)
+            val shutdowns =
+                    json.optJSONObject("document")
+                            ?.optJSONObject("payload")
+                            ?.optJSONArray("shutdowns")
+                            ?: return 0
+
+            val now = Date()
+            val formats =
+                    listOf(
+                            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US),
+                            SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+                    )
+
+            for (settings in settingsList) {
+                var count = 0
+                for (i in 0 until shutdowns.length()) {
+                    val s = shutdowns.getJSONObject(i)
+                    val endStr = s.optString("endDate", "")
+                    if (endStr.isNotEmpty()) {
+                        var end: Date? = null
+                        for (fmt in formats) {
+                            try {
+                                end = fmt.parse(endStr)
+                                if (end != null) break
+                            } catch (e: Exception) {}
+                        }
+                        if (end != null && end.before(now)) continue
+                    }
+                    val message = s.optString("message", "")
+                    if (matchesStreet(
+                                    message,
+                                    settings.cityName,
+                                    settings.streetName1,
+                                    settings.streetName2
+                            )
+                    )
+                            count++
+                }
+                totalCount += count
+            }
+        } catch (e: Exception) {}
+        return totalCount
+    }
+
+    private fun fetchEnergaApiUrl(): String? {
+        return try {
+            val url =
+                    URL(
+                            "https://www.energa-operator.pl/uslugi/awarie-i-wylaczenia/wylaczenia-planowane"
+                    )
+            val html = URL(url.toString()).readText()
+            val regex = Regex("""data-shutdowns="([^"]+)"""")
+            val match = regex.find(html)
+            match?.groupValues?.get(1)?.let { "https://energa-operator.pl$it" }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun matchesStreet(
+            text: String,
+            cityName: String,
+            streetName1: String,
+            streetName2: String?
+    ): Boolean {
+        if (text.isEmpty()) return false
+
+        // City must match
+        if (!wordMatch(text, cityName)) return false
+
+        // Village case: no street name, match by city name only
+        if (streetName1.isEmpty()) {
+            return true
+        }
 
         // Compound name first (if streetName2 exists)
         if (streetName2 != null) {
@@ -630,12 +789,6 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         // Individual significant words from streetName1
         val words1 = streetName1.split(Regex("\\s+")).filter { it.length >= 3 }
         if (words1.any { wordMatch(text, it) }) return true
-
-        // Individual significant words from streetName2
-        if (streetName2 != null) {
-            val words2 = streetName2.split(Regex("\\s+")).filter { it.length >= 3 }
-            if (words2.any { wordMatch(text, it) }) return true
-        }
 
         return false
     }

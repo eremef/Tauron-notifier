@@ -14,6 +14,7 @@ pub enum AlertSource {
     Tauron,
     Water,
     Fortum,
+    Energa,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -118,7 +119,7 @@ impl OutageItem {
         }
     }
 
-    pub fn matches_street(&self, street_name_1: &str, street_name_2: &Option<String>) -> bool {
+    pub fn matches_street(&self, city_name: &str, street_name_1: &str, street_name_2: &Option<String>) -> bool {
         let Some(message) = &self.Message else {
             return false;
         };
@@ -130,9 +131,12 @@ impl OutageItem {
                 .unwrap_or(false)
         }
 
+        if street_name_1.is_empty() {
+            return word_match(message, city_name);
+        }
+
         // Build priority list: compound name first (if nazwa_2 exists), then individual words
         let mut candidates: Vec<String> = Vec::new();
-
         if let Some(n2) = street_name_2 {
             let compound = format!("{} {}", n2.trim(), street_name_1.trim());
             candidates.push(compound);
@@ -163,6 +167,12 @@ pub struct AddressEntry {
     pub name: String,
     #[serde(rename = "cityName")]
     pub city_name: String,
+    #[serde(default)]
+    pub voivodeship: String,
+    #[serde(default)]
+    pub district: String,
+    #[serde(default)]
+    pub commune: String,
     #[serde(rename = "streetName")]
     pub street_name: String,
     #[serde(rename = "streetName1", default)]
@@ -202,6 +212,7 @@ impl Default for Settings {
                 "tauron".to_string(),
                 "water".to_string(),
                 "fortum".to_string(),
+                "energa".to_string(),
             ]),
         }
     }

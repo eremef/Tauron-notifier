@@ -1,22 +1,20 @@
 mod api_logic;
+mod energa;
 mod tauron;
 mod teryt;
 
+use api_logic::{
+    load_settings_from_path, save_settings_to_path, AddressEntry, Settings, UnifiedAlert,
+    FORTUM_CITY_GUID, FORTUM_REGION_ID, FORTUM_URL, MPWIK_URL,
+};
+use chrono::{SecondsFormat, Utc};
+use std::fs;
+use std::path::PathBuf;
 use tauri::command;
 use tauri::AppHandle;
 use tauri::Manager;
-use chrono::{Utc, SecondsFormat};
-use api_logic::{
-    Settings, AddressEntry, UnifiedAlert, MPWIK_URL, FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID,
-    save_settings_to_path, load_settings_from_path
-};
-use tauron::{
-    GeoItem, OutageResponse, BASE_URL,
-    build_client,
-};
+use tauron::{build_client, GeoItem, OutageResponse, BASE_URL};
 use teryt::{TerytCity, TerytStreet};
-use std::fs;
-use std::path::PathBuf;
 
 fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -26,7 +24,12 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 // ── Tauron API lookups (internal, for outage fetching) ───
 
-async fn lookup_city(city_name: &str) -> Result<Vec<GeoItem>, String> {
+async fn lookup_city(
+    city_name: &str,
+    voivodeship: &str,
+    district: &str,
+    commune: &str,
+) -> Result<Vec<GeoItem>, String> {
     let client = build_client()?;
     let cache_bust = Utc::now().timestamp_millis().to_string();
     let encoded_name = city_name.replace(' ', "%20");
@@ -35,7 +38,62 @@ async fn lookup_city(city_name: &str) -> Result<Vec<GeoItem>, String> {
         BASE_URL, encoded_name, cache_bust
     );
 
-    log::debug!("Tauron API: GET {}", url);
+    log::info!("Tauron API: GET {}", url);
+
+    let res = client
+        .get(&url)
+        .header("accept", "application/json")
+        .header("x-requested-with", "XMLHttpRequest")
+        .header("Referer", "https://www.tauron-dystrybucja.pl/wylaczenia")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("HTTP error: {}", res.status()));
+    }
+
+    let cities: Vec<GeoItem> = res.json().await.map_err(|e| e.to_string())?;
+
+    // Filter by administrative units
+    let filtered: Vec<GeoItem> = if voivodeship.is_empty() {
+        cities
+    } else {
+        cities
+            .into_iter()
+            .filter(|c| {
+                let p_match = c
+                    .ProvinceName
+                    .as_ref()
+                    .map(|p| p.to_lowercase() == voivodeship.to_lowercase())
+                    .unwrap_or(false);
+                let d_match = c
+                    .DistrictName
+                    .as_ref()
+                    .map(|d| d.to_lowercase() == district.to_lowercase())
+                    .unwrap_or(false);
+                let c_match = c
+                    .CommuneName
+                    .as_ref()
+                    .map(|cm| cm.to_lowercase() == commune.to_lowercase())
+                    .unwrap_or(false);
+                p_match && d_match && c_match
+            })
+            .collect()
+    };
+
+    Ok(filtered)
+}
+async fn lookup_street(street_name: &str, city_gaid: u64) -> Result<Vec<GeoItem>, String> {
+    let client = build_client()?;
+    let cache_bust = Utc::now().timestamp_millis().to_string();
+    let encoded_name = street_name.replace(' ', "%20");
+    let url = format!(
+        "{}/enum/geo/streets?partName={}&ownerGAID={}&_={}",
+        BASE_URL, encoded_name, city_gaid, cache_bust
+    );
+
+    log::info!("Tauron API: GET {}", url);
 
     let res = client
         .get(&url)
@@ -53,16 +111,15 @@ async fn lookup_city(city_name: &str) -> Result<Vec<GeoItem>, String> {
     res.json().await.map_err(|e| e.to_string())
 }
 
-async fn lookup_street(street_name: &str, city_gaid: u64) -> Result<Vec<GeoItem>, String> {
+async fn lookup_only_one_street(city_gaid: u64) -> Result<Vec<GeoItem>, String> {
     let client = build_client()?;
     let cache_bust = Utc::now().timestamp_millis().to_string();
-    let encoded_name = street_name.replace(' ', "%20");
     let url = format!(
-        "{}/enum/geo/streets?partName={}&ownerGAID={}&_={}",
-        BASE_URL, encoded_name, city_gaid, cache_bust
+        "{}/enum/geo/onlyonestreet?ownerGAID={}&_={}",
+        BASE_URL, city_gaid, cache_bust
     );
 
-    log::debug!("Tauron API: GET {}", url);
+    log::info!("Tauron API (onlyonestreet): GET {}", url);
 
     let res = client
         .get(&url)
@@ -113,18 +170,17 @@ async fn load_settings(app: AppHandle) -> Result<Option<Settings>, String> {
 #[command]
 async fn add_address(app: AppHandle, address: AddressEntry) -> Result<Settings, String> {
     let path = settings_path(&app)?;
-    let mut settings = load_settings_from_path(&path)?
-        .unwrap_or_else(|| Settings::default());
-    
+    let mut settings = load_settings_from_path(&path)?.unwrap_or_default();
+
     if settings.addresses.len() >= 5 {
         return Err("Maximum of 5 addresses allowed".to_string());
     }
-    
+
     settings.addresses.push(address);
     if settings.primary_address_index.is_none() {
         settings.primary_address_index = Some(0);
     }
-    
+
     save_settings_to_path(&path, &settings)?;
     Ok(settings)
 }
@@ -132,15 +188,14 @@ async fn add_address(app: AppHandle, address: AddressEntry) -> Result<Settings, 
 #[command]
 async fn remove_address(app: AppHandle, index: usize) -> Result<Settings, String> {
     let path = settings_path(&app)?;
-    let mut settings = load_settings_from_path(&path)?
-        .unwrap_or_else(|| Settings::default());
-    
+    let mut settings = load_settings_from_path(&path)?.unwrap_or_default();
+
     if index >= settings.addresses.len() {
         return Err("Invalid address index".to_string());
     }
-    
+
     settings.addresses.remove(index);
-    
+
     if let Some(ref mut primary) = settings.primary_address_index {
         if *primary >= settings.addresses.len() {
             *primary = settings.addresses.len().saturating_sub(1);
@@ -152,7 +207,7 @@ async fn remove_address(app: AppHandle, index: usize) -> Result<Settings, String
     if settings.addresses.is_empty() {
         settings.primary_address_index = None;
     }
-    
+
     save_settings_to_path(&path, &settings)?;
     Ok(settings)
 }
@@ -160,28 +215,30 @@ async fn remove_address(app: AppHandle, index: usize) -> Result<Settings, String
 #[command]
 async fn set_primary_address(app: AppHandle, index: usize) -> Result<Settings, String> {
     let path = settings_path(&app)?;
-    let mut settings = load_settings_from_path(&path)?
-        .unwrap_or_else(|| Settings::default());
-    
+    let mut settings = load_settings_from_path(&path)?.unwrap_or_default();
+
     if index >= settings.addresses.len() {
         return Err("Invalid address index".to_string());
     }
-    
+
     settings.primary_address_index = Some(index);
     save_settings_to_path(&path, &settings)?;
     Ok(settings)
 }
 
 #[command]
-async fn update_address(app: AppHandle, index: usize, address: AddressEntry) -> Result<Settings, String> {
+async fn update_address(
+    app: AppHandle,
+    index: usize,
+    address: AddressEntry,
+) -> Result<Settings, String> {
     let path = settings_path(&app)?;
-    let mut settings = load_settings_from_path(&path)?
-        .unwrap_or_else(|| Settings::default());
-    
+    let mut settings = load_settings_from_path(&path)?.unwrap_or_default();
+
     if index >= settings.addresses.len() {
         return Err("Invalid address index".to_string());
     }
-    
+
     settings.addresses[index] = address;
     save_settings_to_path(&path, &settings)?;
     Ok(settings)
@@ -195,30 +252,55 @@ async fn fetch_tauron_outages(address: &AddressEntry) -> Result<OutageResponse, 
         None => address.street_name_1.clone(),
     };
 
-    log::debug!("Tauron: fetching for city='{}', street='{}'", address.city_name, street_query);
+    log::info!(
+        "Tauron: fetching for city='{}' ({}/{}/{}), street='{}'",
+        address.city_name,
+        address.voivodeship,
+        address.district,
+        address.commune,
+        street_query
+    );
 
     // Look up Tauron GAIDs dynamically from address names
-    let cities = lookup_city(&address.city_name).await?;
+    let cities = lookup_city(
+        &address.city_name,
+        &address.voivodeship,
+        &address.district,
+        &address.commune,
+    )
+    .await?;
     let city = cities
         .into_iter()
         .next()
         .ok_or_else(|| format!("City '{}' not found in Tauron", address.city_name))?;
 
-    log::debug!("Tauron: found city '{}' GAID={}", city.Name, city.GAID);
+    log::info!("Tauron: found city '{}' GAID={}", city.Name, city.GAID);
 
-    let streets = lookup_street(&street_query, city.GAID).await?;
+    let streets = if address.street_name_1.is_empty() {
+        lookup_only_one_street(city.GAID).await?
+    } else {
+        lookup_street(&street_query, city.GAID).await?
+    };
 
     if streets.is_empty() {
-        return Err(format!("Street '{}' not found in Tauron (no results)", street_query));
+        return Err(format!(
+            "Street '{}' not found in Tauron (no results)",
+            street_query
+        ));
     }
 
     for s in &streets {
-        log::debug!("Tauron: street candidate: '{}' (GAID={})", s.Name, s.GAID);
+        log::info!("Tauron: street candidate: '{}' (GAID={})", s.Name, s.GAID);
     }
 
     let street = streets.into_iter().next().unwrap();
 
-    log::debug!("Tauron: found street '{}' GAID={} (queried as '{}')", street.Name, street.GAID, street_query);
+    log::info!(
+        "Tauron: found street '{}' GAID={} (queried as '{}')",
+        street.Name,
+        street.GAID,
+        street_query
+    );
 
     let now = Utc::now();
     let from_date = now.to_rfc3339_opts(SecondsFormat::Millis, true);
@@ -229,8 +311,11 @@ async fn fetch_tauron_outages(address: &AddressEntry) -> Result<OutageResponse, 
         BASE_URL, city.GAID, street.GAID, address.house_no.replace(' ', "%20"), from_date.replace(' ', "%20"), cache_bust
     );
 
+    log::info!("Tauron API (outages){}", url);
+
     let client = build_client()?;
-    let res = client.get(&url)
+    let res = client
+        .get(&url)
         .header("accept", "application/json")
         .header("x-requested-with", "XMLHttpRequest")
         .header("Referer", "https://www.tauron-dystrybucja.pl/wylaczenia")
@@ -242,7 +327,8 @@ async fn fetch_tauron_outages(address: &AddressEntry) -> Result<OutageResponse, 
         return Err(format!("HTTP error! status: {}", res.status()));
     }
 
-    let mut data = res.json::<OutageResponse>()
+    let mut data = res
+        .json::<OutageResponse>()
         .await
         .map_err(|e| e.to_string())?;
 
@@ -255,7 +341,10 @@ async fn fetch_water_alerts() -> Result<Vec<UnifiedAlert>, String> {
     let client = build_client()?;
     let res = client
         .post(MPWIK_URL)
-        .header("content-type", "application/x-www-form-urlencoded; charset=UTF-8")
+        .header(
+            "content-type",
+            "application/x-www-form-urlencoded; charset=UTF-8",
+        )
         .header("accept", "application/json")
         .header("x-requested-with", "XMLHttpRequest")
         .header("origin", "https://www.mpwik.wroc.pl")
@@ -282,13 +371,25 @@ async fn fetch_water_alerts() -> Result<Vec<UnifiedAlert>, String> {
 
 async fn fetch_fortum_alerts() -> Result<Vec<UnifiedAlert>, String> {
     let client = build_client()?;
-    
-    let planned_url = format!("{}?cityGuid={}&regionId={}&current=false", FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID);
-    let current_url = format!("{}?cityGuid={}&regionId={}&current=true", FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID);
-    
+
+    let planned_url = format!(
+        "{}?cityGuid={}&regionId={}&current=false",
+        FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID
+    );
+    let current_url = format!(
+        "{}?cityGuid={}&regionId={}&current=true",
+        FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID
+    );
+
     let (planned_res, current_res) = tokio::join!(
-        client.get(&planned_url).header("accept", "application/json").send(),
-        client.get(&current_url).header("accept", "application/json").send()
+        client
+            .get(&planned_url)
+            .header("accept", "application/json")
+            .send(),
+        client
+            .get(&current_url)
+            .header("accept", "application/json")
+            .send()
     );
 
     let planned_data: api_logic::FortumResponse = planned_res
@@ -306,7 +407,7 @@ async fn fetch_fortum_alerts() -> Result<Vec<UnifiedAlert>, String> {
     let mut seen_ids = std::collections::HashSet::new();
     let mut all_points = planned_data.points;
     all_points.extend(current_data.points);
-    
+
     let alerts: Vec<UnifiedAlert> = all_points
         .into_iter()
         .filter(|p| seen_ids.insert(p.switch_off_id.clone()))
@@ -314,6 +415,26 @@ async fn fetch_fortum_alerts() -> Result<Vec<UnifiedAlert>, String> {
         .collect();
 
     Ok(alerts)
+}
+
+async fn fetch_energa_alerts() -> Result<Vec<energa::EnergaShutdown>, String> {
+    let client = build_client()?;
+    let url = energa::extract_energa_api_url(&client).await?;
+    log::info!("Energa API calculated URL: {}", url);
+
+    let res = client
+        .get(&url)
+        .header("accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("Energa HTTP error: {}", res.status()));
+    }
+
+    let data: energa::EnergaResponse = res.json().await.map_err(|e| e.to_string())?;
+    Ok(data.document.payload.shutdowns)
 }
 
 #[command]
@@ -327,9 +448,19 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
     let enabled_sources = settings
         .as_ref()
         .and_then(|s| s.enabled_sources.clone())
-        .unwrap_or_else(|| vec!["tauron".to_string(), "water".to_string(), "fortum".to_string()]);
+        .unwrap_or_else(|| {
+            vec![
+                "tauron".to_string(),
+                "water".to_string(),
+                "fortum".to_string(),
+            ]
+        });
 
-    log::info!("fetch_all_alerts: enabled_sources={:?}, addresses={}", enabled_sources, settings.as_ref().map(|s| s.addresses.len()).unwrap_or(0));
+    log::info!(
+        "fetch_all_alerts: enabled_sources={:?}, addresses={}",
+        enabled_sources,
+        settings.as_ref().map(|s| s.addresses.len()).unwrap_or(0)
+    );
 
     // Fetch Tauron alerts for each address (only if provider enabled)
     if enabled_sources.contains(&"tauron".to_string()) {
@@ -344,7 +475,9 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
                             .map(|item| {
                                 let mut alert = item.to_unified();
                                 alert.address_index = Some(idx);
-                                alert.is_local = Some(item.matches_street(&addr.street_name_1, &addr.street_name_2));
+                                alert.is_local = Some(
+                                    item.matches_street(&addr.city_name, &addr.street_name_1, &addr.street_name_2),
+                                );
                                 alert
                             })
                             .collect();
@@ -375,6 +508,36 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
         }
     }
 
+    // Fetch Energa alerts
+    if enabled_sources.contains(&"energa".to_string()) {
+        match fetch_energa_alerts().await {
+            Ok(shutdowns) => {
+                if let Some(ref s) = settings {
+                    for (idx, addr) in s.addresses.iter().enumerate() {
+                        let local_shutdowns: Vec<UnifiedAlert> = shutdowns
+                            .iter()
+                            .filter(|sd| {
+                                sd.matches_address(
+                                    &addr.city_name,
+                                    &addr.street_name_1,
+                                    &addr.street_name_2,
+                                )
+                            })
+                            .map(|sd| {
+                                let mut alert = sd.to_unified();
+                                alert.address_index = Some(idx);
+                                alert.is_local = Some(true);
+                                alert
+                            })
+                            .collect();
+                        all_alerts.extend(local_shutdowns);
+                    }
+                }
+            }
+            Err(e) => errors.push(format!("Energa: {}", e)),
+        }
+    }
+
     if all_alerts.is_empty() && !errors.is_empty() {
         return Err(errors.join("; "));
     }
@@ -382,31 +545,37 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
     Ok(all_alerts)
 }
 
+#[command]
+async fn teryt_city_has_streets(app: AppHandle, city_id: u64) -> Result<bool, String> {
+    teryt::city_has_streets(&app, city_id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
-    .plugin(tauri_plugin_fs::init())
-    .setup(|app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
-      Ok(())
-    })
-    .invoke_handler(tauri::generate_handler![
-        fetch_all_alerts,
-        teryt_lookup_city,
-        teryt_lookup_street,
-        save_settings,
-        load_settings,
-        add_address,
-        remove_address,
-        set_primary_address,
-        update_address
-    ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .setup(|app| {
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            fetch_all_alerts,
+            teryt_lookup_city,
+            teryt_lookup_street,
+            teryt_city_has_streets,
+            save_settings,
+            load_settings,
+            add_address,
+            remove_address,
+            set_primary_address,
+            update_address
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
