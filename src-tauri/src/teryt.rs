@@ -34,31 +34,12 @@ fn db_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
         return Ok(db);
     }
 
-    // Copy from resource dir to app data dir on first use
-    if let Ok(resource_path) = app.path().resource_dir() {
-        let candidates = [
-            resource_path.join("assets").join("teryt"),
-            resource_path.join("assets").join("assets").join("teryt"),
-            resource_path.join("teryt"),
-        ];
-        for src in &candidates {
-            if src.exists() {
-                if std::fs::copy(src, &db).is_ok() {
-                    return Ok(db);
-                }
-            }
-        }
-    }
-
-    // Fallback: try the raw asset path (Android may return asset:// URLs)
-    let asset_candidates = [
-        std::path::PathBuf::from("/data/data/xyz.eremef.awaria/files/assets/assets/teryt"),
-        std::path::PathBuf::from("/data/data/xyz.eremef.awaria/files/assets/teryt"),
-        std::path::PathBuf::from("/data/data/xyz.eremef.awaria/files/teryt"),
-    ];
-    for src in &asset_candidates {
-        if src.exists() {
-            if std::fs::copy(src, &db).is_ok() {
+    // Try using Tauri 2 path resolver (works for bundled resources)
+    use tauri::path::BaseDirectory;
+    use tauri_plugin_fs::FsExt;
+    if let Ok(resource_path) = app.path().resolve("teryt", BaseDirectory::Resource) {
+        if let Ok(bytes) = app.fs().read(&resource_path) {
+            if std::fs::write(&db, bytes).is_ok() {
                 return Ok(db);
             }
         }

@@ -32,7 +32,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "assets/teryt": "assets/teryt"
+      "assets/teryt": "teryt"
     },
     "macOS": {
       "minimumSystemVersion": "11.0",
