@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
+import android.util.Log
 import android.util.SizeF
 import android.widget.RemoteViews
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -46,6 +47,7 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val WORK_NAME = "xyz.eremef.awaria.WIDGET_UPDATE_WORK"
+        const val TAG = "AwariaWidget"
 
         // Light theme colors (from style.css :root)
         private const val LIGHT_PRIMARY = "#D9006C"
@@ -62,6 +64,7 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
     abstract val lightPrimary: String
     abstract val darkPrimary: String
     abstract val iconResId: Int
+    abstract val labelKey: String
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == refreshAction || intent.action == Intent.ACTION_BOOT_COMPLETED) {
@@ -215,6 +218,7 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
             "alerts" -> if (isPl) "alertów" else "alerts"
             "setup" -> if (isPl) "Skonfiguruj" else "Setup needed"
             "updating" -> if (isPl) "Aktualizacja..." else "Updating..."
+            "heating" -> if (isPl) "Ogrzewanie" else "Heating"
             else -> key
         }
     }
@@ -354,7 +358,7 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_root, clickPending)
 
         applyTheme(views, dark)
-        views.setTextViewText(R.id.widget_label, getTranslation("alerts", language))
+        views.setTextViewText(R.id.widget_label, getTranslation(labelKey, language))
         views.setTextViewText(R.id.widget_count, count)
         views.setTextViewText(R.id.widget_updated, updatedAt)
 
@@ -554,26 +558,53 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
     }
 
     protected fun fetchFortumAlertCount(settingsList: List<WidgetSettings>): Int {
-        val cityGuid = "d06e8606-f1d7-eb11-bacb-000d3aa9626e"
-        val regionId = "3"
-
-        val plannedUrl =
-                URL(
-                        "https://formularz.fortum.pl/api/v1/switchoffs?cityGuid=$cityGuid&regionId=$regionId&current=false"
+        val citiesUrl = URL("https://formularz.fortum.pl/api/v1/teryt/cities")
+        Log.i(TAG, "Fortum: GET $citiesUrl")
+        val citiesJson = try {
+            fetchJson(citiesUrl)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch Fortum cities", e)
+            return 0
+        }
+        
+        val citiesArray = org.json.JSONArray(citiesJson)
+        val cityDataMap = mutableMapOf<String, Pair<String, String>>()
+        for (i in 0 until citiesArray.length()) {
+            val city = citiesArray.getJSONObject(i)
+            val cityName = city.optString("cityName", "").lowercase()
+            if (cityName.isNotEmpty()) {
+                cityDataMap[cityName] = Pair(
+                    city.optString("cityGuid", ""),
+                    city.opt("regionId")?.toString() ?: ""
                 )
-        val currentUrl =
-                URL(
-                        "https://formularz.fortum.pl/api/v1/switchoffs?cityGuid=$cityGuid&regionId=$regionId&current=true"
-                )
+            }
+        }
 
-        val plannedResponse = fetchJson(plannedUrl)
-        val currentResponse = fetchJson(currentUrl)
-
-        // Check against all addresses' street names
+        val cityGroups = settingsList.groupBy { it.cityName.lowercase() }
         var totalCount = 0
-        for (settings in settingsList) {
-            totalCount += parseFortumItems(plannedResponse, settings)
-            totalCount += parseFortumItems(currentResponse, settings)
+
+        for ((cityNameLower, addresses) in cityGroups) {
+            val data = cityDataMap[cityNameLower] ?: continue
+            val guid = data.first
+            val rid = data.second
+            if (guid.isEmpty() || rid.isEmpty()) continue
+            
+            try {
+                val plannedUrl = URL("https://formularz.fortum.pl/api/v1/switchoffs?cityGuid=$guid&regionId=$rid&current=false")
+                val currentUrl = URL("https://formularz.fortum.pl/api/v1/switchoffs?cityGuid=$guid&regionId=$rid&current=true")
+                
+                Log.i(TAG, "Fortum API: planned=$plannedUrl, current=$currentUrl")
+
+                val plannedRes = fetchJson(plannedUrl)
+                val currentRes = fetchJson(currentUrl)
+                
+                for (addr in addresses) {
+                    totalCount += parseFortumItems(plannedRes, addr)
+                    totalCount += parseFortumItems(currentRes, addr)
+                }
+            } catch (e: Exception) {
+                continue
+            }
         }
         return totalCount
     }
@@ -619,9 +650,8 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
             }
 
             val message = item.optString("message", "")
-            if (matchesStreet(
+            if (matchesStreetOnly(
                             message,
-                            settings.cityName,
                             settings.streetName1,
                             settings.streetName2
                     )
@@ -733,9 +763,21 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
                         if (end != null && end.before(now)) continue
                     }
                     val message = s.optString("message", "")
-                    if (matchesStreet(
+                    val areas = s.optJSONArray("areas")
+                    
+                    val cityMatch = wordMatch(message, settings.cityName)
+                    var communeMatch = false
+                    if (areas != null) {
+                        for (j in 0 until areas.length()) {
+                            if (wordMatch(areas.getString(j), settings.commune)) {
+                                communeMatch = true
+                                break
+                            }
+                        }
+                    }
+
+                    if (cityMatch && communeMatch && matchesStreetOnly(
                                     message,
-                                    settings.cityName,
                                     settings.streetName1,
                                     settings.streetName2
                             )
@@ -775,6 +817,31 @@ abstract class BaseWidgetProvider : AppWidgetProvider() {
         if (!wordMatch(text, cityName)) return false
 
         // Village case: no street name, match by city name only
+        if (streetName1.isEmpty()) {
+            return true
+        }
+
+        // Compound name first (if streetName2 exists)
+        if (streetName2 != null) {
+            val compound = "$streetName2 $streetName1"
+            if (wordMatch(text, compound)) return true
+        }
+
+        // Individual significant words from streetName1
+        val words1 = streetName1.split(Regex("\\s+")).filter { it.length >= 3 }
+        if (words1.any { wordMatch(text, it) }) return true
+
+        return false
+    }
+
+    private fun matchesStreetOnly(
+            text: String,
+            streetName1: String,
+            streetName2: String?
+    ): Boolean {
+        if (text.isEmpty()) return false
+
+        // Village case: no street name
         if (streetName1.isEmpty()) {
             return true
         }

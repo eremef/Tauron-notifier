@@ -9,6 +9,7 @@ class MpwikWidgetProvider : BaseWidgetProvider() {
     override val lightPrimary: String = "#0077D9" // Water Blue
     override val darkPrimary: String = "#4DA6FF"
     override val iconResId: Int = R.drawable.ic_water
+    override val labelKey: String = "alerts"
 
     override suspend fun fetchCount(settings: List<WidgetSettings>): Int {
         return fetchMpwikAlertCount(settings)

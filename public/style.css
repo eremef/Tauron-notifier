@@ -27,6 +27,10 @@
     /* Sky 500 */
     --fortum-color: #00a859;
     /* Fortum Green */
+    --energa-color: #e50512;
+    /* Energa Red */
+    --enea-color: #00225f;
+    /* Enea Blue */
 }
 
 .hidden {
@@ -64,6 +68,10 @@
     /* Gray */
     --fortum-color: #00c86b;
     /* Fortum Green */
+    --energa-color: #f87171;
+    /* Light Red */
+    --enea-color: #60a5fa;
+    /* Light Blue */
 }
 
 [data-theme="emerald"] {
@@ -92,6 +100,9 @@
     /* Amber for Contrast */
     --water-color: #3b82f6;
     /* Blue */
+    --fortum-color: #10b981;
+    --energa-color: #be123c;
+    --enea-color: #0369a1;
 }
 
 [data-theme="ocean"] {
@@ -121,6 +132,9 @@
     --tauron-color: #ff9f43;
     /* Softened Orange-Red */
     --water-color: #38bdf8;
+    --fortum-color: #4ade80;
+    --energa-color: #fb7185;
+    --enea-color: #bae6fd;
 }
 
 [data-theme="nord"] {
@@ -155,6 +169,11 @@
     /* Nord 13 */
     --water-color: #81a1c1;
     /* Nord 9 */
+    --fortum-color: #a3be8c;
+    --energa-color: #bf616a;
+    /* Nord 11 */
+    --enea-color: #5e81ac;
+    /* Nord 10 */
 }
 
 [data-theme="dracula"] {
@@ -181,6 +200,11 @@
     /* Orange */
     --water-color: #8be9fd;
     /* Cyan */
+    --fortum-color: #50fa7b;
+    --energa-color: #ff5555;
+    /* Red */
+    --enea-color: #bd93f9;
+    /* Purple */
 }
 
 [data-theme="sepia"] {
@@ -209,6 +233,9 @@
     /* Saddle Brown */
     --water-color: #556b2f;
     /* Dark Olive */
+    --fortum-color: #6a994e;
+    --energa-color: #9b2226;
+    --enea-color: #003049;
 }
 
 [data-theme="latte"] {
@@ -237,6 +264,9 @@
     /* Golden Caramel */
     --water-color: #588157;
     /* Muted Sage */
+    --fortum-color: #6a994e;
+    --energa-color: #c1121f;
+    --enea-color: #3d405b;
 }
 
 [data-theme="monochrome-light"] {
@@ -262,6 +292,8 @@
     --tauron-color: #525252;
     --water-color: #525252;
     --fortum-color: #525252;
+    --energa-color: #525252;
+    --enea-color: #525252;
 }
 
 [data-theme="monochrome-dark"] {
@@ -287,6 +319,8 @@
     --tauron-color: #a3a3a3;
     --water-color: #a3a3a3;
     --fortum-color: #a3a3a3;
+    --energa-color: #a3a3a3;
+    --enea-color: #a3a3a3;
 }
 
 * {
@@ -618,10 +652,13 @@ h1 {
     color: var(--water-color);
 }
 
-.card.source-fortum .outage-type {
-    color: var(--fortum-color);
+.card.source-energa .outage-type {
+    color: var(--energa-color);
 }
 
+.card.source-enea .outage-type {
+    color: var(--enea-color);
+}
 
 .outage-time {
     font-size: 0.85rem;
@@ -711,6 +748,14 @@ h1 {
 
 .collapsible.source-fortum .section-label.other {
     color: var(--fortum-color);
+}
+
+.collapsible.source-energa .section-label.other {
+    color: var(--energa-color);
+}
+
+.collapsible.source-enea .section-label.other {
+    color: var(--enea-color);
 }
 
 .other-divider {

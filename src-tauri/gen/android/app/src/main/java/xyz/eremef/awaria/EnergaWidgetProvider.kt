@@ -8,6 +8,7 @@ class EnergaWidgetProvider : BaseWidgetProvider() {
     override val lightPrimary: String = "#0160a9" // Energa Blue
     override val darkPrimary: String = "#0180ff"
     override val iconResId: Int = R.drawable.ic_electricity
+    override val labelKey: String = "outages"
 
     override suspend fun fetchCount(settings: List<WidgetSettings>): Int {
         return fetchEnergaAlertCount(settings)

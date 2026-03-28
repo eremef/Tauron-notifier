@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 
 pub const MPWIK_URL: &str = "https://www.mpwik.wroc.pl/wp-admin/admin-ajax.php";
 pub const FORTUM_URL: &str = "https://formularz.fortum.pl/api/v1/switchoffs";
-pub const FORTUM_CITY_GUID: &str = "d06e8606-f1d7-eb11-bacb-000d3aa9626e";
-pub const FORTUM_REGION_ID: u32 = 3;
+pub const FORTUM_CITIES_URL: &str = "https://formularz.fortum.pl/api/v1/teryt/cities";
 
 // ── Alert source abstraction ──────────────────────────────
 
@@ -15,6 +14,7 @@ pub enum AlertSource {
     Water,
     Fortum,
     Energa,
+    Enea,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -46,6 +46,14 @@ pub struct MpwikResponse {
 }
 
 // ── Fortum types ─────────────────────────────────────────
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FortumCity {
+    pub city_guid: String,
+    pub city_name: String,
+    pub region_id: u32,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct FortumResponse {
@@ -118,46 +126,100 @@ impl OutageItem {
             is_local: None,
         }
     }
+}
 
-    pub fn matches_street(&self, city_name: &str, street_name_1: &str, street_name_2: &Option<String>) -> bool {
-        let Some(message) = &self.Message else {
-            return false;
-        };
+pub fn matches_address(
+    message: &Option<String>,
+    city_name: &str,
+    street_name_1: &str,
+    street_name_2: &Option<String>,
+) -> bool {
+    let Some(message) = message else {
+        return false;
+    };
 
-        fn word_match(text: &str, word: &str) -> bool {
-            let pattern = format!(r"(?i)\b{}\b", regex::escape(word));
-            regex::Regex::new(&pattern)
-                .map(|r| r.is_match(text))
-                .unwrap_or(false)
+    fn word_match(text: &str, word: &str) -> bool {
+        let pattern = format!(r"(?i)\b{}\b", regex::escape(word));
+        regex::Regex::new(&pattern)
+            .map(|r| r.is_match(text))
+            .unwrap_or(false)
+    }
+
+    // City must match
+    if !word_match(message, city_name) {
+        return false;
+    }
+
+    if street_name_1.is_empty() {
+        return true;
+    }
+
+    // Build priority list: compound name first (if nazwa_2 exists), then individual words
+    let mut candidates: Vec<String> = Vec::new();
+    if let Some(n2) = street_name_2 {
+        let compound = format!("{} {}", n2.trim(), street_name_1.trim());
+        candidates.push(compound);
+    }
+
+    // Add significant individual words (>= 3 chars)
+    for word in street_name_1.split_whitespace() {
+        if word.len() >= 3 {
+            candidates.push(word.to_string());
         }
-
-        if street_name_1.is_empty() {
-            return word_match(message, city_name);
-        }
-
-        // Build priority list: compound name first (if nazwa_2 exists), then individual words
-        let mut candidates: Vec<String> = Vec::new();
-        if let Some(n2) = street_name_2 {
-            let compound = format!("{} {}", n2.trim(), street_name_1.trim());
-            candidates.push(compound);
-        }
-
-        // Add significant individual words (>= 3 chars)
-        for word in street_name_1.split_whitespace() {
+    }
+    if let Some(n2) = street_name_2 {
+        for word in n2.split_whitespace() {
             if word.len() >= 3 {
                 candidates.push(word.to_string());
             }
         }
-        if let Some(n2) = street_name_2 {
-            for word in n2.split_whitespace() {
-                if word.len() >= 3 {
-                    candidates.push(word.to_string());
-                }
+    }
+
+    candidates.iter().any(|c| word_match(message, c))
+}
+
+pub fn matches_street_only(
+    message: &Option<String>,
+    street_name_1: &str,
+    street_name_2: &Option<String>,
+) -> bool {
+    let Some(message) = message else {
+        return false;
+    };
+
+    fn word_match(text: &str, word: &str) -> bool {
+        let pattern = format!(r"(?i)\b{}\b", regex::escape(word));
+        regex::Regex::new(&pattern)
+            .map(|r| r.is_match(text))
+            .unwrap_or(false)
+    }
+
+    if street_name_1.is_empty() {
+        return true;
+    }
+
+    // Build priority list: compound name first (if nazwa_2 exists), then individual words
+    let mut candidates: Vec<String> = Vec::new();
+    if let Some(n2) = street_name_2 {
+        let compound = format!("{} {}", n2.trim(), street_name_1.trim());
+        candidates.push(compound);
+    }
+
+    // Add significant individual words (>= 3 chars)
+    for word in street_name_1.split_whitespace() {
+        if word.len() >= 3 {
+            candidates.push(word.to_string());
+        }
+    }
+    if let Some(n2) = street_name_2 {
+        for word in n2.split_whitespace() {
+            if word.len() >= 3 {
+                candidates.push(word.to_string());
             }
         }
-
-        candidates.iter().any(|c| word_match(message, c))
     }
+
+    candidates.iter().any(|c| word_match(message, c))
 }
 
 // ── Address & Settings ────────────────────────────────────
@@ -213,6 +275,7 @@ impl Default for Settings {
                 "water".to_string(),
                 "fortum".to_string(),
                 "energa".to_string(),
+                "enea".to_string(),
             ]),
         }
     }
@@ -258,6 +321,9 @@ mod tests {
         let addr = AddressEntry {
             name: "Home".to_string(),
             city_name: "Wrocław".to_string(),
+            voivodeship: "".to_string(),
+            district: "".to_string(),
+            commune: "".to_string(),
             street_name: "ul. Kuźnicza".to_string(),
             street_name_1: "Kuźnicza".to_string(),
             street_name_2: None,

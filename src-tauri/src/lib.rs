@@ -1,11 +1,12 @@
 mod api_logic;
+mod enea;
 mod energa;
 mod tauron;
 mod teryt;
 
 use api_logic::{
-    load_settings_from_path, save_settings_to_path, AddressEntry, Settings, UnifiedAlert,
-    FORTUM_CITY_GUID, FORTUM_REGION_ID, FORTUM_URL, MPWIK_URL,
+    load_settings_from_path, matches_address, matches_street_only, save_settings_to_path,
+    AddressEntry, FortumCity, Settings, UnifiedAlert, FORTUM_CITIES_URL, FORTUM_URL, MPWIK_URL,
 };
 use chrono::{SecondsFormat, Utc};
 use std::fs;
@@ -172,8 +173,8 @@ async fn add_address(app: AppHandle, address: AddressEntry) -> Result<Settings, 
     let path = settings_path(&app)?;
     let mut settings = load_settings_from_path(&path)?.unwrap_or_default();
 
-    if settings.addresses.len() >= 5 {
-        return Err("Maximum of 5 addresses allowed".to_string());
+    if settings.addresses.len() >= 20 {
+        return Err("Maximum of 20 addresses allowed".to_string());
     }
 
     settings.addresses.push(address);
@@ -369,17 +370,36 @@ async fn fetch_water_alerts() -> Result<Vec<UnifiedAlert>, String> {
     Ok(alerts)
 }
 
-async fn fetch_fortum_alerts() -> Result<Vec<UnifiedAlert>, String> {
+async fn fetch_fortum_cities() -> Result<Vec<FortumCity>, String> {
+    let client = build_client()?;
+    log::info!("Fortum: GET {}", FORTUM_CITIES_URL);
+    let res = client
+        .get(FORTUM_CITIES_URL)
+        .header("accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("Fortum cities HTTP error: {}", res.status()));
+    }
+
+    res.json().await.map_err(|e| e.to_string())
+}
+
+async fn fetch_fortum_alerts(city_guid: &str, region_id: u32) -> Result<Vec<UnifiedAlert>, String> {
     let client = build_client()?;
 
     let planned_url = format!(
         "{}?cityGuid={}&regionId={}&current=false",
-        FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID
+        FORTUM_URL, city_guid, region_id
     );
     let current_url = format!(
         "{}?cityGuid={}&regionId={}&current=true",
-        FORTUM_URL, FORTUM_CITY_GUID, FORTUM_REGION_ID
+        FORTUM_URL, city_guid, region_id
     );
+
+    log::info!("Fortum API: planned={}, current={}", planned_url, current_url);
 
     let (planned_res, current_res) = tokio::join!(
         client
@@ -476,7 +496,7 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
                                 let mut alert = item.to_unified();
                                 alert.address_index = Some(idx);
                                 alert.is_local = Some(
-                                    item.matches_street(&addr.city_name, &addr.street_name_1, &addr.street_name_2),
+                                    matches_address(&item.Message, &addr.city_name, &addr.street_name_1, &addr.street_name_2),
                                 );
                                 alert
                             })
@@ -502,9 +522,57 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
 
     // Fetch Fortum alerts (only if provider enabled)
     if enabled_sources.contains(&"fortum".to_string()) {
-        match fetch_fortum_alerts().await {
-            Ok(fortum_alerts) => all_alerts.extend(fortum_alerts),
-            Err(e) => errors.push(format!("Fortum: {}", e)),
+        match fetch_fortum_cities().await {
+            Ok(cities) => {
+                if let Some(ref s) = settings {
+                    // Group addresses by Fortum city to minimize API calls
+                    let mut city_map = std::collections::HashMap::new();
+                    for (idx, addr) in s.addresses.iter().enumerate() {
+                        if let Some(fc) = cities.iter().find(|c| {
+                            c.city_name.to_lowercase() == addr.city_name.to_lowercase()
+                        }) {
+                            city_map
+                                .entry((fc.city_guid.clone(), fc.region_id, fc.city_name.clone()))
+                                .or_insert_with(Vec::new)
+                                .push((idx, addr));
+                        }
+                    }
+
+                    for ((guid, rid, city_name), addrs) in city_map {
+                        match fetch_fortum_alerts(&guid, rid).await {
+                            Ok(alerts) => {
+                                for a in &alerts {
+                                    let mut matched_any = false;
+                                    for (idx, addr) in &addrs {
+                                        if matches_street_only(
+                                            &a.message,
+                                            &addr.street_name_1,
+                                            &addr.street_name_2,
+                                        ) {
+                                            let mut alert = a.clone();
+                                            alert.address_index = Some(*idx);
+                                            alert.is_local = Some(true);
+                                            all_alerts.push(alert);
+                                            matched_any = true;
+                                        }
+                                    }
+
+                                    if !matched_any {
+                                        if let Some((idx, _)) = addrs.first() {
+                                            let mut alert = a.clone();
+                                            alert.address_index = Some(*idx);
+                                            alert.is_local = Some(false);
+                                            all_alerts.push(alert);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => errors.push(format!("Fortum ({}): {}", city_name, e)),
+                        }
+                    }
+                }
+            }
+            Err(e) => errors.push(format!("Fortum cities: {}", e)),
         }
     }
 
@@ -519,6 +587,7 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
                             .filter(|sd| {
                                 sd.matches_address(
                                     &addr.city_name,
+                                    &addr.commune,
                                     &addr.street_name_1,
                                     &addr.street_name_2,
                                 )
@@ -538,11 +607,66 @@ async fn fetch_all_alerts(app: AppHandle) -> Result<Vec<UnifiedAlert>, String> {
         }
     }
 
+    // Fetch Enea alerts
+    if enabled_sources.contains(&"enea".to_string()) {
+        match build_client() {
+            Ok(client) => match enea::fetch_all_enea_outages(&client).await {
+                Ok(items) => {
+                    if let Some(ref s) = settings {
+                        for (idx, addr) in s.addresses.iter().enumerate() {
+                            let local_items: Vec<UnifiedAlert> = items
+                                .iter()
+                                .filter(|item| {
+                                    item.matches_address(
+                                        &addr.city_name,
+                                        &addr.commune,
+                                        &addr.street_name_1,
+                                        &addr.street_name_2,
+                                    )
+                                })
+                                .map(|item| {
+                                    let mut alert = item.to_unified();
+                                    alert.address_index = Some(idx);
+                                    alert.is_local = Some(true);
+                                    alert
+                                })
+                                .collect();
+                            all_alerts.extend(local_items);
+                        }
+                    }
+                }
+                Err(e) => errors.push(format!("Enea API Error: {}", e)),
+            },
+            Err(e) => errors.push(format!("Enea Client Error: {}", e)),
+        }
+    }
+
     if all_alerts.is_empty() && !errors.is_empty() {
         return Err(errors.join("; "));
     }
 
     Ok(all_alerts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_fetch_eneo_outages_real_backend() {
+        let client = build_client().unwrap();
+        let items = enea::fetch_all_enea_outages(&client).await.unwrap();
+        
+        let kicin_items: Vec<_> = items.into_iter()
+            .filter(|i| i.matches_address("Kicin", "", "Poznańska", &None))
+            .collect();
+            
+        println!("Found Kicin / Poznańska items: {}", kicin_items.len());
+        assert!(!kicin_items.is_empty());
+
+        let unified = kicin_items[0].to_unified();
+        println!("Unified structure: {:?}", unified);
+    }
 }
 
 #[command]

@@ -27,6 +27,7 @@ pub struct EnergaShutdown {
     pub start_date: Option<String>,
     pub end_date: Option<String>,
     pub message: Option<String>,
+    pub areas: Option<Vec<String>>,
 }
 
 impl EnergaShutdown {
@@ -45,6 +46,7 @@ impl EnergaShutdown {
     pub fn matches_address(
         &self,
         city: &str,
+        commune: &str,
         street_name_1: &str,
         street_name_2: &Option<String>,
     ) -> bool {
@@ -59,9 +61,16 @@ impl EnergaShutdown {
                 .unwrap_or(false)
         }
 
-        // Match city
+        // Match city in message
         if !word_match(message, city) {
             return false;
+        }
+
+        // Match commune in areas (if areas are provided)
+        if let Some(areas) = &self.areas {
+            if !areas.iter().any(|a| word_match(a, commune)) {
+                return false;
+            }
         }
 
         // Match street logic
@@ -133,19 +142,20 @@ mod tests {
         let shutdown = EnergaShutdown {
             start_date: None,
             end_date: None,
-            message: Some("Gdańsk ulica św. Brata Alberta 14, 15, 17, 19".to_string()),
+            message: Some("Tuliszków ulica Długa 1".to_string()),
+            areas: Some(vec!["Tuliszków obszar wiejski w gminie miejsko-wiejskiej".to_string()]),
         };
 
         // Complete match -> true
-        assert!(shutdown.matches_address("Gdańsk", "Brata Alberta", &Some("św.".to_string())));
+        assert!(shutdown.matches_address("Tuliszków", "Tuliszków", "Długa", &None));
 
-        // Match with just the street components -> true
-        assert!(shutdown.matches_address("Gdańsk", "Brata Alberta", &None));
+        // Wrong commune -> false
+        assert!(!shutdown.matches_address("Tuliszków", "Wrocław", "Długa", &None));
 
-        // Missing city should fail
-        assert!(!shutdown.matches_address("Warszawa", "Brata Alberta", &Some("św.".to_string())));
+        // Wrong city -> false
+        assert!(!shutdown.matches_address("Gdańsk", "Tuliszków", "Długa", &None));
 
         // Matching city but completely wrong street -> should fail
-        assert!(!shutdown.matches_address("Gdańsk", "Długa", &None));
+        assert!(!shutdown.matches_address("Gdańsk", "", "Długa", &None));
     }
 }

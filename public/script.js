@@ -67,7 +67,7 @@ function initSettings() {
         hideSuggestions('street-suggestions');
     });
 
-    document.getElementById('cancel-address-btn').addEventListener('click', function() {
+    document.getElementById('cancel-address-btn').addEventListener('click', function () {
         document.getElementById('address-form').classList.add('hidden');
         document.getElementById('add-address-btn').classList.remove('hidden');
         document.getElementById('addresses-list').classList.remove('hidden');
@@ -168,7 +168,7 @@ function initSettings() {
                 primaryAddressIndex: null,
                 theme: newTheme,
                 language: 'system',
-                enabledSources: ['tauron', 'water', 'fortum', 'energa']
+                enabledSources: ['tauron', 'water', 'fortum', 'energa', 'enea']
             };
         } else {
             currentSettings.theme = newTheme;
@@ -191,7 +191,7 @@ function initSettings() {
                 primaryAddressIndex: null,
                 theme: 'system',
                 language: newLang,
-                enabledSources: ['tauron', 'water', 'fortum', 'energa']
+                enabledSources: ['tauron', 'water', 'fortum', 'energa', 'enea']
             };
         } else {
             currentSettings.language = newLang;
@@ -208,9 +208,9 @@ function initSettings() {
         document.getElementById('location-settings-collapsible').classList.toggle('collapsed');
     });
 
-    ['source-tauron-check', 'source-water-check', 'source-fortum-check', 'source-energa-check'].forEach(id => {
+    ['source-tauron-check', 'source-water-check', 'source-fortum-check', 'source-energa-check', 'source-enea-check'].forEach(id => {
         const checkbox = document.getElementById(id);
-        if(!checkbox) return;
+        if (!checkbox) return;
         checkbox.addEventListener('change', () => {
             if (!currentSettings) return;
             const enabledSources = [];
@@ -218,6 +218,7 @@ function initSettings() {
             if (document.getElementById('source-water-check').checked) enabledSources.push('water');
             if (document.getElementById('source-fortum-check').checked) enabledSources.push('fortum');
             if (document.getElementById('source-energa-check') && document.getElementById('source-energa-check').checked) enabledSources.push('energa');
+            if (document.getElementById('source-enea-check') && document.getElementById('source-enea-check').checked) enabledSources.push('enea');
             currentSettings.enabledSources = enabledSources;
             autoSaveSettings().then(() => {
                 fetchOutages();
@@ -241,9 +242,9 @@ function updateAddressFilter() {
     const wasHidden = filter.classList.contains('hidden');
     filter.innerHTML = '';
     filter.appendChild(allOpt);
-    
+
     const addressCount = currentSettings && currentSettings.addresses ? currentSettings.addresses.length : 0;
-    
+
     if (addressCount === 0) {
         filter.classList.add('hidden');
     } else if (addressCount === 1) {
@@ -289,7 +290,7 @@ function renderAddressesList() {
     `).join('');
 }
 
-window.setPrimaryAddress = async function(idx) {
+window.setPrimaryAddress = async function (idx) {
     try {
         currentSettings = await window.__TAURI__.core.invoke('set_primary_address', { index: idx });
         renderAddressesList();
@@ -299,7 +300,7 @@ window.setPrimaryAddress = async function(idx) {
     }
 };
 
-window.removeAddress = async function(idx) {
+window.removeAddress = async function (idx) {
     try {
         currentSettings = await window.__TAURI__.core.invoke('remove_address', { index: idx });
         renderAddressesList();
@@ -310,7 +311,7 @@ window.removeAddress = async function(idx) {
     }
 };
 
-window.editAddress = function(idx) {
+window.editAddress = function (idx) {
     const addr = currentSettings.addresses[idx];
     if (!addr) return;
 
@@ -337,7 +338,7 @@ window.editAddress = function(idx) {
     selectedStreetName = addr.streetName;
     selectedStreetName1 = addr.streetName1 || '';
     selectedStreetName2 = addr.streetName2 || null;
-    
+
     // Check if city has streets
     if (addr.streetId === 0) {
         cityHasNoStreets = true;
@@ -414,7 +415,7 @@ function renderCitySuggestions(cities) {
             selectedStreetId = null;
             selectedStreetName = '';
             cityHasNoStreets = false;
-            
+
             // Check if city has streets
             window.__TAURI__.core.invoke('teryt_city_has_streets', { cityId: selectedCityId })
                 .then(hasStreets => {
@@ -525,12 +526,22 @@ async function loadSettingsAndFetch() {
             }
             applyTheme(settings.theme || 'system');
 
-            const sources = settings.enabledSources || ['tauron', 'water', 'fortum', 'energa'];
+            if (settings.enabledSources) {
+                if (!settings.enabledSources.includes('enea')) {
+                    settings.enabledSources.push('enea');
+                    autoSaveSettings();
+                }
+            }
+
+            const sources = settings.enabledSources || ['tauron', 'water', 'fortum', 'energa', 'enea'];
             document.getElementById('source-tauron-check').checked = sources.includes('tauron');
             document.getElementById('source-water-check').checked = sources.includes('water');
             document.getElementById('source-fortum-check').checked = sources.includes('fortum');
             if (document.getElementById('source-energa-check')) {
                 document.getElementById('source-energa-check').checked = sources.includes('energa');
+            }
+            if (document.getElementById('source-enea-check')) {
+                document.getElementById('source-enea-check').checked = sources.includes('enea');
             }
 
             updateAddressFilter();
@@ -556,7 +567,7 @@ async function loadSettingsAndFetch() {
                 primaryAddressIndex: null,
                 theme: 'system',
                 language: 'system',
-                enabledSources: ['tauron', 'water', 'fortum', 'energa']
+                enabledSources: ['tauron', 'water', 'fortum', 'energa', 'enea']
             };
             updateAddressFilter();
             renderAddressesList();
@@ -608,7 +619,7 @@ async function saveNewAddress() {
             cityId: selectedCityId,
             streetId: selectedStreetId
         };
-        
+
         if (editingAddressIndex !== null) {
             // Update existing address
             currentSettings.addresses[editingAddressIndex] = address;
@@ -624,7 +635,7 @@ async function saveNewAddress() {
         document.getElementById('address-form').classList.add('hidden');
         document.getElementById('add-address-btn').classList.remove('hidden');
         document.getElementById('addresses-list').classList.remove('hidden');
-        
+
         editingAddressIndex = null;
         updateAddressFilter();
         renderAddressesList();
@@ -734,15 +745,15 @@ function updateLastUpdated(date) {
     if (date) lastFetchDate = date;
     const el = document.getElementById('last-updated');
     if (!el) return;
-    
+
     if (!lastFetchDate) {
         el.textContent = typeof t !== 'undefined' ? t('checking_updates') : 'Checking for updates...';
         return;
     }
-    
+
     // We remove data-i18n so applyTranslations doesn't overwrite our manual timestamp
     el.removeAttribute('data-i18n');
-    
+
     const localeStr = typeof getLocaleString !== 'undefined' ? getLocaleString() : 'pl-PL';
     const label = typeof t !== 'undefined' ? t('last_updated') : 'Last updated';
     el.textContent = `${label}: ${lastFetchDate.toLocaleTimeString(localeStr)}`;
@@ -753,7 +764,7 @@ function filterAlerts(alerts, streetName) {
 
     const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const wordMatch = (text, word) => {
-        const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'i');
+        const regex = new RegExp(`(^|[^\\p{L}])${escapeRegExp(word)}([^\\p{L}]|$)`, 'iu');
         return regex.test(text);
     };
 
@@ -773,7 +784,7 @@ function filterOutages(allOutages, streetName, settings) {
 
     const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const wordMatch = (text, word) => {
-        const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'i');
+        const regex = new RegExp(`(^|[^\\p{L}])${escapeRegExp(word)}([^\\p{L}]|$)`, 'iu');
         return regex.test(text);
     };
 
@@ -792,22 +803,22 @@ function filterOutages(allOutages, streetName, settings) {
 
 function matchesStreetName(alert, addr) {
     if (!alert.message || !addr) return false;
-    
+
     const message = alert.message;
     const streetName1 = addr.streetName1 || '';
     const streetName2 = addr.streetName2 || null;
 
     const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
+
     if (!streetName1) {
         // Fallback for cities without streets: match by city name in the message
         const cityName = addr.cityName || '';
         if (!cityName) return false;
-        const regex = new RegExp(`\\b${escapeRegExp(cityName)}\\b`, 'i');
+        const regex = new RegExp(`(^|[^\\p{L}])${escapeRegExp(cityName)}([^\\p{L}]|$)`, 'iu');
         return regex.test(message);
     }
     const wordMatch = (word) => {
-        const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`, 'i');
+        const regex = new RegExp(`(^|[^\\p{L}])${escapeRegExp(word)}([^\\p{L}]|$)`, 'iu');
         return regex.test(message);
     };
 
@@ -832,12 +843,11 @@ function matchesStreetName(alert, addr) {
 function matchesAddress(alert, addresses, addrIdx) {
     const addr = addresses[addrIdx];
     if (!addr) return false;
-    
-    // For Tauron, use isLocal flag
-    if (alert.source === 'tauron') {
-        return alert.isLocal === true;
+
+    if (alert.source === 'tauron' || alert.source === 'energa' || alert.source === 'enea') {
+        return alert.isLocal === true && alert.addressIndex === addrIdx;
     }
-    
+
     // For Water and Fortum, use street name matching
     if (!alert.message) return false;
     return matchesStreetName(alert, addr);
@@ -846,7 +856,7 @@ function matchesAddress(alert, addresses, addrIdx) {
 function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
     const now = new Date();
 
-    const enabledSources = (settings && settings.enabledSources) ? settings.enabledSources : ['tauron', 'water', 'fortum', 'energa'];
+    const enabledSources = (settings && settings.enabledSources) ? settings.enabledSources : ['tauron', 'water', 'fortum', 'energa', 'enea'];
     const activeAlerts = alerts.filter(item => {
         if (!enabledSources.includes(item.source)) return false;
         if (!item.endDate) return true;
@@ -855,11 +865,12 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
     });
 
     const addresses = (settings && settings.addresses) ? settings.addresses : [];
-    
+
     let localTauron = [], otherTauron = [];
     let localWater = [], otherWater = [];
     let localFortum = [], otherFortum = [];
     let localEnerga = [], otherEnerga = [];
+    let localEnea = [], otherEnea = [];
 
     if (selectedAddrIdx >= 0 && addresses[selectedAddrIdx]) {
         activeAlerts.forEach(item => {
@@ -888,11 +899,16 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
                     otherFortum.push(item);
                 }
             } else if (item.source === 'energa') {
-                const addr = addresses[selectedAddrIdx];
-                if (addr && matchesStreetName(item, addr)) {
+                if (item.addressIndex === selectedAddrIdx && item.isLocal === true) {
                     localEnerga.push(item);
                 } else {
                     otherEnerga.push(item);
+                }
+            } else if (item.source === 'enea') {
+                if (item.addressIndex === selectedAddrIdx && item.isLocal === true) {
+                    localEnea.push(item);
+                } else {
+                    otherEnea.push(item);
                 }
             }
         });
@@ -926,6 +942,13 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
                 } else {
                     otherEnerga.push(item);
                 }
+            } else if (item.source === 'enea') {
+                const isLocal = addresses.some((_, idx) => matchesAddress(item, addresses, idx));
+                if (isLocal) {
+                    localEnea.push(item);
+                } else {
+                    otherEnea.push(item);
+                }
             }
         });
     } else {
@@ -933,10 +956,11 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
         otherWater = activeAlerts.filter(a => a.source === 'water');
         otherFortum = activeAlerts.filter(a => a.source === 'fortum');
         otherEnerga = activeAlerts.filter(a => a.source === 'energa');
+        otherEnea = activeAlerts.filter(a => a.source === 'enea');
     }
 
-    const hasLocalAlerts = localTauron.length > 0 || localWater.length > 0 || localFortum.length > 0 || localEnerga.length > 0;
-    const hasOtherAlerts = otherTauron.length > 0 || otherWater.length > 0 || otherFortum.length > 0 || otherEnerga.length > 0;
+    const hasLocalAlerts = localTauron.length > 0 || localWater.length > 0 || localFortum.length > 0 || localEnerga.length > 0 || localEnea.length > 0;
+    const hasOtherAlerts = otherTauron.length > 0 || otherWater.length > 0 || otherFortum.length > 0 || otherEnerga.length > 0 || otherEnea.length > 0;
     const hasAnyAlerts = hasLocalAlerts || hasOtherAlerts;
 
     container.innerHTML = '';
@@ -949,10 +973,10 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
     }
 
     if (hasLocalAlerts) {
-        const totalLocal = localTauron.length + localWater.length + localFortum.length + localEnerga.length;
+        const totalLocal = localTauron.length + localWater.length + localFortum.length + localEnerga.length + localEnea.length;
         const lblYourLoc = typeof t !== 'undefined' ? t('lbl_your_location') : 'Your location';
         container.innerHTML += `<div class="section-label">${lblYourLoc} (${totalLocal})</div>`;
-        
+
         if (localTauron.length > 0) {
             container.innerHTML += renderCards(localTauron, 'tauron');
         }
@@ -965,12 +989,15 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
         if (localEnerga.length > 0) {
             container.innerHTML += renderCards(localEnerga, 'energa');
         }
+        if (localEnea.length > 0) {
+            container.innerHTML += renderCards(localEnea, 'enea');
+        }
     }
 
     if (hasOtherAlerts) {
         const lblDivider = typeof t !== 'undefined' ? t('lbl_other_alerts_divider') : 'Other alerts';
         container.innerHTML += `<div class="other-divider"><span>${lblDivider}</span></div>`;
-        
+
         if (otherTauron.length > 0) {
             const lblSection = typeof t !== 'undefined' ? t('lbl_section_tauron') : 'Power (Tauron)';
             container.innerHTML += `
@@ -1029,6 +1056,20 @@ function renderAlerts(alerts, container, settings, selectedAddrIdx = -1) {
                 </div>
             `;
         }
+        if (otherEnea.length > 0) {
+            const lblSection = (typeof t !== 'undefined' ? t('lbl_section_enea') : null) || 'Power (Enea)';
+            container.innerHTML += `
+                <div class="collapsible source-enea collapsed">
+                    <div class="section-label other" onclick="this.parentElement.classList.toggle('collapsed')">
+                        <span>${lblSection} (${otherEnea.length})</span>
+                        <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="collapsible-content">
+                        ${renderCards(otherEnea, 'enea')}
+                    </div>
+                </div>
+            `;
+        }
     }
 }
 
@@ -1036,10 +1077,12 @@ function renderCards(alerts, source) {
     const sourceLabel = source === 'water'
         ? ((typeof t !== 'undefined' ? t('source_water') : null) || '💧 Water Outage')
         : source === 'fortum'
-        ? ((typeof t !== 'undefined' ? t('source_fortum') : null) || '⚡ Fortum Outage')
-        : source === 'energa'
-        ? ((typeof t !== 'undefined' ? t('source_energa') : null) || '⚡ Energa Outage')
-        : ((typeof t !== 'undefined' ? t('source_tauron') : null) || '⚡ Power Outage');
+            ? ((typeof t !== 'undefined' ? t('source_fortum') : null) || '⚡ Fortum Outage')
+            : source === 'energa'
+                ? ((typeof t !== 'undefined' ? t('source_energa') : null) || '⚡ Energa Outage')
+                : source === 'enea'
+                    ? ((typeof t !== 'undefined' ? t('source_enea') : null) || '⚡ Enea Outage')
+                    : ((typeof t !== 'undefined' ? t('source_tauron') : null) || '⚡ Power Outage');
 
     return alerts.map(item => `
         <div class="card source-${source}">

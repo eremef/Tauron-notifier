@@ -11,7 +11,7 @@ class WidgetUpdateWorker(
     workerParams: WorkerParameters
 ) : CoroutineWorker(context, workerParams) {
 
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): androidx.work.ListenableWorker.Result {
         val appWidgetManager = AppWidgetManager.getInstance(context)
         
         // Update Tauron widgets
@@ -38,6 +38,14 @@ class WidgetUpdateWorker(
             energaProvider.updateWidget(context, appWidgetManager, id)
         }
 
-        return Result.success()
+        // Update Fortum widgets
+        val fortumName = ComponentName(context, FortumWidgetProvider::class.java)
+        val fortumIds = appWidgetManager.getAppWidgetIds(fortumName)
+        val fortumProvider = FortumWidgetProvider()
+        for (id in fortumIds) {
+            fortumProvider.updateWidget(context, appWidgetManager, id)
+        }
+
+        return androidx.work.ListenableWorker.Result.success()
     }
 }
